@@ -11,7 +11,7 @@ RUN apt-get --yes update && apt-get --yes upgrade && \
     apt-get --yes --quiet install wget jq curl git dnsmasq
 
 RUN git clone https://github.com/iternity-dotcom/mint && \
-    cd /mint && /mint/release.sh
+    cd /mint && git checkout --quiet "updated-suite" && /mint/release.sh
 
 WORKDIR /mint
 
