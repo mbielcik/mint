@@ -974,6 +974,44 @@ func testListMultipartUploads(s3Client *s3.S3) {
 		return
 	}
 
+	// 6 "completed parts", but last part is empty
+	completedParts = append(completedParts, &s3.CompletedPart{})
+	_, err = s3Client.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: completedParts},
+		UploadId: multipartUpload.UploadId,
+	})
+	if err == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go CompleteMultipartUpload is expected to fail but succeeded", errors.New("expected nil")).Fatal()
+		return
+	}
+
+	if err.(s3.RequestFailure).Code() != "InvalidPartOrder" {
+		failureLog(function, args, startTime, "", "AWS SDK Go CompleteMultipartUpload is expected to fail with InvalidPartOrder", err).Fatal()
+		return
+	}
+
+	// 1 empty "completed part"
+	completedParts = make([]*s3.CompletedPart, 1)
+	_, err = s3Client.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: completedParts},
+		UploadId: multipartUpload.UploadId,
+	})
+	if err == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go CompleteMultipartUpload is expected to fail but succeeded", errors.New("expected nil")).Fatal()
+		return
+	}
+
+	if err.(s3.RequestFailure).Code() != "InvalidPart" {
+		failureLog(function, args, startTime, "", "AWS SDK Go CompleteMultipartUpload is expected to fail with InvalidPart", err).Fatal()
+		return
+	}
+
 	successLogger(function, args, startTime).Info()
 }
 
