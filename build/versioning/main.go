@@ -127,6 +127,8 @@ func main() {
 	testLockingLegalholdMultipart()
 	testPutGetRetentionCompliance()
 	testPutGetDeleteRetentionGovernance()
+	testPutGetDeleteRetentionGovernanceMultipart()
 	testLockingRetentionGovernance()
+	testLockingRetentionGovernanceMultipart()
 	testLockingRetentionCompliance()
 }
