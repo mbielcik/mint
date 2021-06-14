@@ -134,7 +134,7 @@ func testLockingRetentionGovernance() {
 // Test locking retention governance (multipart)
 func testLockingRetentionGovernanceMultipart() {
 	startTime := time.Now()
-	function := "testLockingRetentionGovernance"
+	function := "testLockingRetentionGovernanceMultipart"
 	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "versioning-test-")
 	object := "testObject"
 	expiry := 1 * time.Minute
