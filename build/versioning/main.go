@@ -124,6 +124,7 @@ func main() {
 	testListObjectsVersionsWithEmptyDirObject()
 	testTagging()
 	testLockingLegalhold()
+	testLockingLegalholdMultipart()
 	testPutGetRetentionCompliance()
 	testPutGetDeleteRetentionGovernance()
 	testLockingRetentionGovernance()
