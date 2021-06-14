@@ -17,7 +17,7 @@
 
 SPOTBUGS_VERSION="4.2.2" ## needed since 8.0.2 release
 JUNIT_VERSION="4.12" ## JUNIT version
-MINIO_JAVA_VERSION="8.2.1"
+MINIO_JAVA_VERSION="8.2.2"
 
 test_run_dir="$MINT_RUN_CORE_DIR/minio-java"
 git clone --quiet https://github.com/iternity-dotcom/minio-java.git "$test_run_dir/minio-java.git"
