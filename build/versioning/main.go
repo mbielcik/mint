@@ -29,6 +29,17 @@ import (
 // S3 client for testing
 var s3Client *s3.S3
 
+// Create a testfile
+func createTestfile(size int64, name string) {
+	f, err := os.Create(name)
+	if err != nil {
+		log.Fatal("Failed to create testfile")
+	}
+	if err := f.Truncate(size); err != nil {
+		log.Fatal("Failed to truncate")
+	}
+}
+
 func cleanupBucket(bucket string, function string, args map[string]interface{}, startTime time.Time) {
 	start := time.Now()
 
@@ -124,6 +135,7 @@ func main() {
 	testListObjectsVersionsWithEmptyDirObject()
 	testTagging()
 	testLockingLegalhold()
+	testLockingLegalholdMultipart()
 	testPutGetRetentionCompliance()
 	testPutGetDeleteRetentionGovernance()
 	testLockingRetentionGovernance()

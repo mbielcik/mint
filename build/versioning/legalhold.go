@@ -20,8 +20,11 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -277,6 +280,168 @@ func testLockingLegalhold() {
 	_, err = s3Client.PutObjectLegalHold(polhInput)
 	if err == nil {
 		failureLog(function, args, startTime, "", fmt.Sprintf("PutObjectLegalHold expected to fail but got %v", err), err).Fatal()
+		return
+	}
+
+	successLogger(function, args, startTime).Info()
+}
+
+// Test locking (multipart)
+func testLockingLegalholdMultipart() {
+	startTime := time.Now()
+	function := "testLockingLegalholdMultipart"
+	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "versioning-test-")
+	object := "testObject"
+	expiry := 1 * time.Minute
+	args := map[string]interface{}{
+		"bucketName": bucket,
+		"objectName": object,
+		"expiry":     expiry,
+	}
+
+	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+		Bucket:                     aws.String(bucket),
+		ObjectLockEnabledForBucket: aws.Bool(true),
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "NotImplemented: A header you provided implies functionality that is not implemented") {
+			ignoreLog(function, args, startTime, "Versioning is not implemented").Info()
+			return
+		}
+		failureLog(function, args, startTime, "", "CreateBucket failed", err).Fatal()
+		return
+	}
+
+	fileSize := 15 * 1024 * 1024
+	createTestfile(int64(fileSize), object)
+
+	f, err := os.Open(object)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Open testfile failed", err).Fatal()
+		return
+	}
+
+	defer cleanupBucket(bucket, function, args, startTime)
+	defer os.Remove(object)
+	defer f.Close()
+
+	partSize := 5 * 1024 * 1024 // Set part size to 5 MB (minimum size for a part)
+	partCount := fileSize / partSize
+	parts := make([]*string, partCount)
+	buffer := make([]byte, fileSize)
+	f.Read(buffer)
+
+	multipartUpload, err := s3Client.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
+		Bucket:                    aws.String(bucket),
+		Key:                       aws.String(object),
+		ObjectLockLegalHoldStatus: aws.String("ON"),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CreateMultipartupload API failed", err).Fatal()
+		return
+	}
+
+	for j := 0; j < partCount; j++ {
+		result, errUpload := s3Client.UploadPart(&s3.UploadPartInput{
+			Bucket:     aws.String(bucket),
+			Key:        aws.String(object),
+			UploadId:   multipartUpload.UploadId,
+			PartNumber: aws.Int64(int64(j + 1)),
+			Body:       bytes.NewReader(buffer[j*partSize : (j+1)*partSize]),
+		})
+		if errUpload != nil {
+			_, _ = s3Client.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
+				Bucket:   aws.String(bucket),
+				Key:      aws.String(object),
+				UploadId: multipartUpload.UploadId,
+			})
+			failureLog(function, args, startTime, "", "UploadPart API failed for", errUpload).Fatal()
+			return
+		}
+		parts[j] = result.ETag
+	}
+
+	completedParts := make([]*s3.CompletedPart, len(parts))
+	for i, part := range parts {
+		completedParts[i] = &s3.CompletedPart{
+			ETag:       part,
+			PartNumber: aws.Int64(int64(i + 1)),
+		}
+	}
+
+	output, err := s3Client.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: completedParts},
+		UploadId: multipartUpload.UploadId,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CompleteMultipartUpload is expected to succeed but failed", errors.New("expected nil")).Fatal()
+		return
+	}
+
+	input := &s3.PutObjectLegalHoldInput{
+		Bucket:    aws.String(bucket),
+		Key:       aws.String(object),
+		LegalHold: &s3.ObjectLockLegalHold{Status: aws.String("OFF")},
+		VersionId: aws.String(*output.VersionId),
+	}
+	_, err = s3Client.PutObjectLegalHold(input)
+	if err != nil {
+		failureLog(function, args, startTime, "", fmt.Sprintf("Turning off legalhold failed with %v", err), err).Fatal()
+		return
+	}
+
+	// Error case: omit a part when uploading
+	multipartUpload, err = s3Client.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
+		Bucket:                    aws.String(bucket),
+		Key:                       aws.String(object),
+		ObjectLockLegalHoldStatus: aws.String("ON"),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CreateMultipartupload API failed", err).Fatal()
+		return
+	}
+
+	for j := 0; j < partCount-1; j++ {
+		result, errUpload := s3Client.UploadPart(&s3.UploadPartInput{
+			Bucket:     aws.String(bucket),
+			Key:        aws.String(object),
+			UploadId:   multipartUpload.UploadId,
+			PartNumber: aws.Int64(int64(j + 1)),
+			Body:       bytes.NewReader(buffer[j*partSize : (j+1)*partSize]),
+		})
+		if errUpload != nil {
+			_, _ = s3Client.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
+				Bucket:   aws.String(bucket),
+				Key:      aws.String(object),
+				UploadId: multipartUpload.UploadId,
+			})
+			failureLog(function, args, startTime, "", "UploadPart API failed for", errUpload).Fatal()
+			return
+		}
+		parts[j] = result.ETag
+	}
+
+	completedParts = make([]*s3.CompletedPart, len(parts))
+	for i, part := range parts {
+		completedParts[i] = &s3.CompletedPart{
+			ETag:       part,
+			PartNumber: aws.Int64(int64(i + 1)),
+		}
+	}
+
+	_, err = s3Client.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: completedParts},
+		UploadId: multipartUpload.UploadId,
+	})
+	// One or more of the specified parts could not be found.  The part may not have been uploaded, or the specified entity tag may not match the part's entity tag.
+	if err == nil {
+		failureLog(function, args, startTime, "", "CompleteMultipartUpload is expected to fail but succeeded", err).Fatal()
 		return
 	}
 
