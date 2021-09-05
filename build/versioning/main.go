@@ -139,5 +139,6 @@ func main() {
 	testPutGetRetentionCompliance()
 	testPutGetDeleteRetentionGovernance()
 	testLockingRetentionGovernance()
+	testLockingRetentionGovernanceMultipart()
 	testLockingRetentionCompliance()
 }

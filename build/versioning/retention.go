@@ -20,8 +20,11 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -123,6 +126,115 @@ func testLockingRetentionGovernance() {
 			failureLog(function, args, startTime, "", fmt.Sprintf("DELETE expected to succeed but got %v", err), err).Fatal()
 			return
 		}
+	}
+
+	successLogger(function, args, startTime).Info()
+}
+
+// Test locking retention governance (multipart)
+func testLockingRetentionGovernanceMultipart() {
+	startTime := time.Now()
+	function := "testLockingRetentionGovernanceMultipart"
+	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "versioning-test-")
+	object := "testObject"
+	expiry := 1 * time.Minute
+	args := map[string]interface{}{
+		"bucketName": bucket,
+		"objectName": object,
+		"expiry":     expiry,
+	}
+
+	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+		Bucket:                     aws.String(bucket),
+		ObjectLockEnabledForBucket: aws.Bool(true),
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "NotImplemented: A header you provided implies functionality that is not implemented") {
+			ignoreLog(function, args, startTime, "Versioning is not implemented").Info()
+			return
+		}
+		failureLog(function, args, startTime, "", "CreateBucket failed", err).Fatal()
+		return
+	}
+
+	fileSize := 15 * 1024 * 1024
+	createTestfile(int64(fileSize), object)
+
+	f, err := os.Open(object)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Open testfile failed", err).Fatal()
+		return
+	}
+
+	defer cleanupBucket(bucket, function, args, startTime)
+	defer os.Remove(object)
+	defer f.Close()
+
+	type uploadedObject struct {
+		retention      string
+		retentionUntil time.Time
+	}
+
+	upload := uploadedObject{
+		retention: "GOVERNANCE", retentionUntil: time.Now().UTC().Add(time.Hour),
+	}
+
+	partSize := 5 * 1024 * 1024 // Set part size to 5 MB (minimum size for a part)
+	partCount := fileSize / partSize
+	parts := make([]*string, partCount)
+	buffer := make([]byte, fileSize)
+	f.Read(buffer)
+
+	multipartUpload, err := s3Client.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
+		Bucket:                    aws.String(bucket),
+		Key:                       aws.String(object),
+		ObjectLockMode:            aws.String(upload.retention),
+		ObjectLockRetainUntilDate: aws.Time(upload.retentionUntil),
+	})
+
+	if err != nil {
+		failureLog(function, args, startTime, "", "CreateMultipartupload API failed", err).Fatal()
+		return
+	}
+
+	for j := 0; j < partCount; j++ {
+		result, errUpload := s3Client.UploadPart(&s3.UploadPartInput{
+			Bucket:     aws.String(bucket),
+			Key:        aws.String(object),
+			UploadId:   multipartUpload.UploadId,
+			PartNumber: aws.Int64(int64(j + 1)),
+			Body:       bytes.NewReader(buffer[j*partSize : (j+1)*partSize]),
+		})
+		if errUpload != nil {
+			_, _ = s3Client.AbortMultipartUpload(&s3.AbortMultipartUploadInput{
+				Bucket:   aws.String(bucket),
+				Key:      aws.String(object),
+				UploadId: multipartUpload.UploadId,
+			})
+			failureLog(function, args, startTime, "", "UploadPart API failed for", errUpload).Fatal()
+			return
+		}
+		parts[j] = result.ETag
+	}
+
+	completedParts := make([]*s3.CompletedPart, len(parts))
+	for i, part := range parts {
+		completedParts[i] = &s3.CompletedPart{
+			ETag:       part,
+			PartNumber: aws.Int64(int64(i + 1)),
+		}
+	}
+
+	_, err = s3Client.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		MultipartUpload: &s3.CompletedMultipartUpload{
+			Parts: completedParts},
+		UploadId: multipartUpload.UploadId,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CompleteMultipartUpload is expected to succeed but failed", errors.New("expected nil")).Fatal()
+		return
 	}
 
 	successLogger(function, args, startTime).Info()
