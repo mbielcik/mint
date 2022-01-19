@@ -22,7 +22,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -115,4 +120,48 @@ func randString(n int, src rand.Source, prefix string) string {
 		remain--
 	}
 	return prefix + string(b[0:30-len(prefix)])
+}
+
+func createS3Client(envCfg envConfig) (*s3.S3, error) {
+	creds := credentials.NewStaticCredentials(envCfg.accessKey, envCfg.secretKey, "")
+	s3Config := &aws.Config{
+		Credentials:      creds,
+		Endpoint:         aws.String(envCfg.sdkEndpoint),
+		Region:           aws.String("us-east-1"),
+		S3ForcePathStyle: aws.Bool(true),
+	}
+	newSession, err := session.NewSession(s3Config)
+
+	// Create an S3 service object in the default region.
+	return s3.New(newSession, s3Config), err
+}
+
+type envConfig struct {
+	endpoint       string
+	sdkEndpoint    string
+	accessKey      string
+	secretKey      string
+	secure         bool
+	remoteTierName string
+}
+
+func loadEnvConfig() envConfig {
+	endpoint := os.Getenv(fmt.Sprintf("SERVER_ENDPOINT"))
+	accessKey := os.Getenv(fmt.Sprintf("ACCESS_KEY"))
+	secretKey := os.Getenv(fmt.Sprintf("SECRET_KEY"))
+	secureVal := os.Getenv(fmt.Sprintf("ENABLE_HTTPS"))
+	sdkEndpoint := "http://" + endpoint
+	if secureVal == "1" {
+		sdkEndpoint = "https://" + endpoint
+	}
+	remoteTierName := os.Getenv(fmt.Sprintf("REMOTE_TIER_NAME"))
+
+	return envConfig{
+		endpoint:       endpoint,
+		accessKey:      accessKey,
+		secretKey:      secretKey,
+		secure:         secureVal == "1",
+		sdkEndpoint:    sdkEndpoint,
+		remoteTierName: remoteTierName,
+	}
 }
