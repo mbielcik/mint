@@ -20,7 +20,6 @@
 package main
 
 import (
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"io/ioutil"
 	"math/rand"
 	"strings"
@@ -30,15 +29,18 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
-// Tests ilm deletion rules
-func testExpiryRules() {
+// Tests ilm transition rules
+func testTransitionRules() {
 	lConfigFuture := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
-				ID:     aws.String("expirydateinfuture"),
+				ID:     aws.String("transitiondateinfuture"),
 				Status: aws.String("Enabled"),
-				Expiration: &s3.LifecycleExpiration{
-					Date: aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 1)),
+				Transitions: []*s3.Transition{
+					{
+						Date:         aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 1)),
+						StorageClass: aws.String(tierName),
+					},
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String(""),
@@ -50,10 +52,13 @@ func testExpiryRules() {
 	lConfigPast := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
-				ID:     aws.String("expirydateinpast"),
+				ID:     aws.String("transitiondateinpast"),
 				Status: aws.String("Enabled"),
-				Expiration: &s3.LifecycleExpiration{
-					Date: aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+				Transitions: []*s3.Transition{
+					{
+						Date:         aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+						StorageClass: aws.String(tierName),
+					},
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String(""),
@@ -65,10 +70,13 @@ func testExpiryRules() {
 	lConfigPastPrefix := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
-				ID:     aws.String("expirydateinpast"),
+				ID:     aws.String("transitiondateinpast"),
 				Status: aws.String("Enabled"),
-				Expiration: &s3.LifecycleExpiration{
-					Date: aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+				Transitions: []*s3.Transition{
+					{
+						Date:         aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+						StorageClass: aws.String(tierName),
+					},
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String("prefix"),
@@ -78,60 +86,60 @@ func testExpiryRules() {
 	}
 
 	testCases := []struct {
-		lConfig     *s3.BucketLifecycleConfiguration
-		object      string
-		expDeletion bool
+		lConfig       *s3.BucketLifecycleConfiguration
+		object        string
+		expTransition bool
 	}{
-		// testExpiryRules case - 1.
-		// Expire date in future, object not deleted
+		// testTransitionRules case - 1.
+		// Transition date in future, object not transitioned
 		{
-			lConfig:     lConfigFuture,
-			object:      "object",
-			expDeletion: false,
+			lConfig:       lConfigFuture,
+			object:        "object",
+			expTransition: false,
 		},
-		// testExpiryRules case - 2.
-		// Expire date in past, rule without prefix filter
+		// testTransitionRules case - 2.
+		// Transition date in past, rule without prefix filter
 		{
-			lConfig:     lConfigPast,
-			object:      "object",
-			expDeletion: true,
+			lConfig:       lConfigPast,
+			object:        "object",
+			expTransition: true,
 		},
-		// testExpiryRules case - 3.
-		// Expire date in past, rule with prefix filter does not match
+		// testTransitionRules case - 3.
+		// Transition date in past, rule with prefix filter does not match
 		{
-			lConfig:     lConfigPastPrefix,
-			object:      "object",
-			expDeletion: false,
+			lConfig:       lConfigPastPrefix,
+			object:        "object",
+			expTransition: false,
 		},
-		// testExpiryRules case - 4.
-		// Expire date in past, rule with prefix filter matches
+		// testTransitionRules case - 4.
+		// Transition date in past, rule with prefix filter matches
 		{
-			lConfig:     lConfigPastPrefix,
-			object:      "prefix/object",
-			expDeletion: true,
+			lConfig:       lConfigPastPrefix,
+			object:        "prefix/object",
+			expTransition: true,
 		},
 	}
 
 	for i, testCase := range testCases {
-		execTestDeletionRules(i, testCase)
+		execTestTransitionRules(i, testCase)
 	}
 
 }
 
-func execTestDeletionRules(i int, testCase struct {
-	lConfig     *s3.BucketLifecycleConfiguration
-	object      string
-	expDeletion bool
+func execTestTransitionRules(i int, testCase struct {
+	lConfig       *s3.BucketLifecycleConfiguration
+	object        string
+	expTransition bool
 }) {
 	// initialize logging params
 	startTime := time.Now()
-	function := "testExpiryRules"
+	function := "testTransitionRules"
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	args := map[string]interface{}{
 		"testCase":      i,
 		"bucketName":    bucketName,
 		"objectName":    testCase.object,
-		"expTransition": testCase.expDeletion,
+		"expTransition": testCase.expTransition,
 	}
 	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
@@ -167,24 +175,28 @@ func execTestDeletionRules(i int, testCase struct {
 		Key:    aws.String(testCase.object),
 	}
 
-	result, err := s3Client.GetObject(getInput)
-	if err != nil {
-		aerr, ok := err.(awserr.Error)
-		if !ok {
-			failureLog(function, args, startTime, "", "Unexpected non aws error on GetObject", err).Error()
-			return
-		}
-		if testCase.expDeletion && aerr.Code() == "NotFound" {
-			successLogger(function, args, startTime).Info()
+	// wait some time before getting object the first time
+	// transition is an async process
+	time.Sleep(1 * time.Second)
+
+	// get with 3 retries
+	var result *s3.GetObjectOutput
+	for i := 0; i < 3; i++ {
+		result, err = s3Client.GetObject(getInput)
+		if err != nil {
+			failureLog(function, args, startTime, "", "GET expected to succeed but failed", err).Error()
 			return
 		}
 
-		failureLog(function, args, startTime, "", "Unexpected aws error on GetObject", err).Error()
-		return
+		if testCase.expTransition && result.StorageClass != nil && *(result.StorageClass) == tierName {
+			break
+		}
+
+		time.Sleep(300 * time.Millisecond)
 	}
 
-	if testCase.expDeletion {
-		failureLog(function, args, startTime, "", "Expected object to be deleted", nil).Error()
+	if testCase.expTransition && (result.StorageClass == nil || *result.StorageClass != tierName) {
+		failureLog(function, args, startTime, "", "Expected object to be transitioned.", nil).Error()
 		return
 	}
 
