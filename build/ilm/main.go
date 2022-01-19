@@ -56,7 +56,7 @@ func main() {
 		return
 	}
 
-	testExpiryRules()
+	testExpiry()
 
 	if serverEnvCfg.remoteTierName == "" {
 		ignoreLog("main", map[string]interface{}{}, time.Now(), "No remote tier name given. Therefore ILM-Tiering tests will be skipped. "+
@@ -65,9 +65,9 @@ func main() {
 	}
 	tierName = serverEnvCfg.remoteTierName
 
-	testTransitionRules()
-	//testExpireTransitioned()
-	//testRestoreObject()
+	testTransition()
+	testExpireTransitioned()
+	testRestore()
 	//testRestoreObjectMultipart()
 
 	cleanupWg.Wait()
@@ -149,7 +149,7 @@ func isPutLifecycleConfigurationImplemented() bool {
 						Date: aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 1)),
 					},
 					Filter: &s3.LifecycleRuleFilter{
-						Prefix: aws.String("/"),
+						Prefix: aws.String(""),
 					},
 				},
 			},

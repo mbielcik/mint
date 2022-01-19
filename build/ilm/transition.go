@@ -20,8 +20,11 @@
 package main
 
 import (
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"io/ioutil"
 	"math/rand"
+	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,7 +33,7 @@ import (
 )
 
 // Tests ilm transition rules
-func testTransitionRules() {
+func testTransition() {
 	lConfigFuture := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
@@ -90,28 +93,28 @@ func testTransitionRules() {
 		object        string
 		expTransition bool
 	}{
-		// testTransitionRules case - 1.
+		// testTransition case - 1.
 		// Transition date in future, object not transitioned
 		{
 			lConfig:       lConfigFuture,
 			object:        "object",
 			expTransition: false,
 		},
-		// testTransitionRules case - 2.
+		// testTransition case - 2.
 		// Transition date in past, rule without prefix filter
 		{
 			lConfig:       lConfigPast,
 			object:        "object",
 			expTransition: true,
 		},
-		// testTransitionRules case - 3.
+		// testTransition case - 3.
 		// Transition date in past, rule with prefix filter does not match
 		{
 			lConfig:       lConfigPastPrefix,
 			object:        "object",
 			expTransition: false,
 		},
-		// testTransitionRules case - 4.
+		// testTransition case - 4.
 		// Transition date in past, rule with prefix filter matches
 		{
 			lConfig:       lConfigPastPrefix,
@@ -121,19 +124,19 @@ func testTransitionRules() {
 	}
 
 	for i, testCase := range testCases {
-		execTestTransitionRules(i, testCase)
+		execTestTransition(i, testCase)
 	}
 
 }
 
-func execTestTransitionRules(i int, testCase struct {
+func execTestTransition(i int, testCase struct {
 	lConfig       *s3.BucketLifecycleConfiguration
 	object        string
 	expTransition bool
 }) {
 	// initialize logging params
 	startTime := time.Now()
-	function := "testTransitionRules"
+	function := "testTransition"
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	args := map[string]interface{}{
 		"testCase":      i,
@@ -209,6 +212,401 @@ func execTestTransitionRules(i int, testCase struct {
 
 	if string(body) != "my content 1" {
 		failureLog(function, args, startTime, "", "Unexpected body content", err).Error()
+		return
+	}
+
+	successLogger(function, args, startTime).Info()
+}
+
+// Tests ilm expiry on transitioned objects
+func testExpireTransitioned() {
+	lConfigExpiry := &s3.BucketLifecycleConfiguration{
+		Rules: []*s3.LifecycleRule{
+			{
+				ID:     aws.String("expirydateinpast"),
+				Status: aws.String("Enabled"),
+				Expiration: &s3.LifecycleExpiration{
+					Date: aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+				},
+				Filter: &s3.LifecycleRuleFilter{
+					Prefix: aws.String(""),
+				},
+			},
+		},
+	}
+
+	lConfigExpiryPrefix := &s3.BucketLifecycleConfiguration{
+		Rules: []*s3.LifecycleRule{
+			{
+				ID:     aws.String("expirydateinpastprefix"),
+				Status: aws.String("Enabled"),
+				Expiration: &s3.LifecycleExpiration{
+					Date: aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+				},
+				Filter: &s3.LifecycleRuleFilter{
+					Prefix: aws.String("prefix"),
+				},
+			},
+		},
+	}
+
+	testCases := []struct {
+		lConfig     *s3.BucketLifecycleConfiguration
+		object      string
+		expDeletion bool
+	}{
+		// testExpireTransitioned case - 1.
+		// Expire date in past, rule without prefix filter
+		{
+			lConfig:     lConfigExpiry,
+			object:      "object",
+			expDeletion: true,
+		},
+		// testExpireTransitioned case - 3.
+		// Expire date in past, rule with prefix filter does not match
+		{
+			lConfig:     lConfigExpiryPrefix,
+			object:      "object",
+			expDeletion: false,
+		},
+		// testExpireTransitioned case - 3.
+		// Expire date in past, rule with prefix filter matches
+		{
+			lConfig:     lConfigExpiryPrefix,
+			object:      "prefix/object",
+			expDeletion: true,
+		},
+	}
+
+	for i, testCase := range testCases {
+		execTestExpireTransitioned(i, testCase)
+	}
+}
+
+func execTestExpireTransitioned(i int, testCase struct {
+	lConfig     *s3.BucketLifecycleConfiguration
+	object      string
+	expDeletion bool
+}) {
+	// initialize logging params
+	startTime := time.Now()
+	function := "testExpireTransitioned"
+	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	args := map[string]interface{}{
+		"testCase":    i,
+		"bucketName":  bucketName,
+		"objectName":  testCase.object,
+		"expDeletion": testCase.expDeletion,
+	}
+
+	lConfigTransition := &s3.BucketLifecycleConfiguration{
+		Rules: []*s3.LifecycleRule{
+			{
+				ID:     aws.String("transitiondateinpast"),
+				Status: aws.String("Enabled"),
+				Transitions: []*s3.Transition{
+					{
+						Date:         aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+						StorageClass: aws.String(tierName),
+					},
+				},
+				Filter: &s3.LifecycleRuleFilter{
+					Prefix: aws.String(""),
+				},
+			},
+		},
+	}
+
+	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CreateBucket Failed", err).Error()
+		return
+	}
+	defer addCleanBucket(bucketName, function, args, startTime)
+
+	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
+		Bucket:                 aws.String(bucketName),
+		LifecycleConfiguration: lConfigTransition,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "Put LifecycleConfiguration for transitioning failed", err).Error()
+		return
+	}
+
+	putInput1 := &s3.PutObjectInput{
+		Body:   aws.ReadSeekCloser(strings.NewReader("my content 1")),
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(testCase.object),
+	}
+	_, err = s3Client.PutObject(putInput1)
+	if err != nil {
+		failureLog(function, args, startTime, "", "PUT expected to succeed but failed", err).Error()
+		return
+	}
+
+	getInput := &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(testCase.object),
+	}
+
+	// wait some time before getting object the first time
+	// transition is an async process
+	time.Sleep(1 * time.Second)
+
+	// get with 3 retries
+	var result *s3.GetObjectOutput
+	for i := 0; i < 3; i++ {
+		result, err = s3Client.GetObject(getInput)
+		if err != nil {
+			failureLog(function, args, startTime, "", "GET expected to succeed but failed", err).Error()
+			return
+		}
+
+		if result.StorageClass == nil || *(result.StorageClass) != tierName {
+			continue
+		}
+
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	if result.StorageClass == nil || *(result.StorageClass) != tierName {
+		failureLog(function, args, startTime, "", "Expected object to be transitioned.", nil).Error()
+		return
+	}
+
+	body, err := ioutil.ReadAll(result.Body)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Expected to return data but failed", err).Error()
+		return
+	}
+	_ = result.Body.Close()
+
+	if string(body) != "my content 1" {
+		failureLog(function, args, startTime, "", "Unexpected body content", err).Error()
+		return
+	}
+
+	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
+		Bucket:                 aws.String(bucketName),
+		LifecycleConfiguration: testCase.lConfig,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "Put LifecycleConfiguration for expiry failed", err).Error()
+		return
+	}
+
+	getInputAfterNewLc := &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(testCase.object),
+	}
+
+	_, err = s3Client.GetObject(getInputAfterNewLc)
+	if err != nil {
+		aerr, ok := err.(awserr.Error)
+		if !ok {
+			failureLog(function, args, startTime, "", "Unexpected non aws error on GetObject", err).Error()
+			return
+		}
+		if testCase.expDeletion && aerr.Code() == "NotFound" {
+			successLogger(function, args, startTime).Info()
+			return
+		}
+
+		failureLog(function, args, startTime, "", "Unexpected aws error on GetObject", err).Error()
+		return
+	}
+
+	if testCase.expDeletion {
+		failureLog(function, args, startTime, "", "Expected object to be deleted", nil).Error()
+		return
+	}
+
+	successLogger(function, args, startTime).Info()
+}
+
+// Tests ilm restore object
+func testRestore() {
+	// initialize logging params
+	startTime := time.Now()
+	function := "testRestore"
+	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	objectName := "object"
+	args := map[string]interface{}{
+		"bucketName": bucketName,
+		"objectName": objectName,
+	}
+
+	lConfigTransition := &s3.BucketLifecycleConfiguration{
+		Rules: []*s3.LifecycleRule{
+			{
+				ID:     aws.String("transitiondateinpast"),
+				Status: aws.String("Enabled"),
+				Transitions: []*s3.Transition{
+					{
+						Date:         aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
+						StorageClass: aws.String(tierName),
+					},
+				},
+				Filter: &s3.LifecycleRuleFilter{
+					Prefix: aws.String(""),
+				},
+			},
+		},
+	}
+
+	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CreateBucket Failed", err).Error()
+		return
+	}
+	defer addCleanBucket(bucketName, function, args, startTime)
+
+	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
+		Bucket:                 aws.String(bucketName),
+		LifecycleConfiguration: lConfigTransition,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "Put LifecycleConfiguration for transitioning failed", err).Error()
+		return
+	}
+
+	putInput1 := &s3.PutObjectInput{
+		Body:   aws.ReadSeekCloser(strings.NewReader("my content 1")),
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectName),
+	}
+	_, err = s3Client.PutObject(putInput1)
+	if err != nil {
+		failureLog(function, args, startTime, "", "PUT expected to succeed but failed", err).Error()
+		return
+	}
+
+	getInput := &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectName),
+	}
+
+	// wait some time before getting object the first time
+	// transition is an async process
+	time.Sleep(1 * time.Second)
+
+	// get with 3 retries
+	var result *s3.GetObjectOutput
+	for i := 0; i < 3; i++ {
+		result, err = s3Client.GetObject(getInput)
+		if err != nil {
+			failureLog(function, args, startTime, "", "GET expected to succeed but failed", err).Error()
+			return
+		}
+
+		if result.StorageClass == nil || *(result.StorageClass) != tierName {
+			continue
+		}
+
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	if result.StorageClass == nil || *(result.StorageClass) != tierName {
+		failureLog(function, args, startTime, "", "Expected object to be transitioned.", nil).Error()
+		return
+	}
+
+	if result.Restore != nil {
+		failureLog(function, args, startTime, "", "Expected restore header to be empty.", nil).Error()
+		return
+	}
+
+	body, err := ioutil.ReadAll(result.Body)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Expected to return data but failed", err).Error()
+		return
+	}
+	_ = result.Body.Close()
+
+	if string(body) != "my content 1" {
+		failureLog(function, args, startTime, "", "Unexpected body content", err).Error()
+		return
+	}
+
+	_, err = s3Client.RestoreObject(&s3.RestoreObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectName),
+		RestoreRequest: &s3.RestoreRequest{
+			Days: aws.Int64(1),
+		},
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "Restore object failed", err).Error()
+		return
+	}
+
+	getInputAfterRestore := &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectName),
+	}
+
+	// get with 5 retries
+	var resultAfterRestore *s3.GetObjectOutput
+	for i := 0; i < 5; i++ {
+		resultAfterRestore, err = s3Client.GetObject(getInputAfterRestore)
+		if err != nil {
+			continue
+		}
+
+		if resultAfterRestore.Restore == nil {
+			continue
+		}
+
+		time.Sleep(time.Second)
+	}
+
+	if err != nil {
+		failureLog(function, args, startTime, "", "Failed to get object after restore", nil).Error()
+		return
+	}
+
+	if resultAfterRestore.Restore == nil {
+		failureLog(function, args, startTime, "", "Expected restore header to be set.", nil).Error()
+		return
+	}
+
+	restoreHeader := *resultAfterRestore.Restore
+	var restoreRegex = regexp.MustCompile(`ongoing-request="(.*?)"(, expiry-date="(.*?)")?`)
+	matches := restoreRegex.FindStringSubmatch(restoreHeader)
+	if len(matches) != 4 {
+		failureLog(function, args, startTime, "", "Expected restore header contain ongoing-request status and expiry-date.", nil).Error()
+		return
+	}
+
+	if matches[1] != "false" {
+		failureLog(function, args, startTime, "", "Expected status in restore header should be 'false'.", nil).Error()
+		return
+	}
+
+	expiry, err := time.Parse(http.TimeFormat, matches[3])
+	if err != nil {
+		failureLog(function, args, startTime, "", "Expected 'expiry-date' cannot be parsed.", err).Error()
+		return
+	}
+
+	if expiry != time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 2) {
+		failureLog(function, args, startTime, "", "Expected 'expiry-date' should be mignight in 2 days.", nil).Error()
+		return
+	}
+
+	bodyAfterRestore, err := ioutil.ReadAll(resultAfterRestore.Body)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Expected to return data after restore but failed", err).Error()
+		return
+	}
+	_ = resultAfterRestore.Body.Close()
+
+	if string(bodyAfterRestore) != "my content 1" {
+		failureLog(function, args, startTime, "", "Unexpected body content after restore", err).Error()
 		return
 	}
 
