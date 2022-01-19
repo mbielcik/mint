@@ -31,7 +31,7 @@ import (
 )
 
 // Tests ilm deletion rules
-func testExpiryRules() {
+func testExpiry() {
 	lConfigFuture := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
@@ -82,28 +82,28 @@ func testExpiryRules() {
 		object      string
 		expDeletion bool
 	}{
-		// testExpiryRules case - 1.
+		// testExpiry case - 1.
 		// Expire date in future, object not deleted
 		{
 			lConfig:     lConfigFuture,
 			object:      "object",
 			expDeletion: false,
 		},
-		// testExpiryRules case - 2.
+		// testExpiry case - 2.
 		// Expire date in past, rule without prefix filter
 		{
 			lConfig:     lConfigPast,
 			object:      "object",
 			expDeletion: true,
 		},
-		// testExpiryRules case - 3.
+		// testExpiry case - 3.
 		// Expire date in past, rule with prefix filter does not match
 		{
 			lConfig:     lConfigPastPrefix,
 			object:      "object",
 			expDeletion: false,
 		},
-		// testExpiryRules case - 4.
+		// testExpiry case - 4.
 		// Expire date in past, rule with prefix filter matches
 		{
 			lConfig:     lConfigPastPrefix,
@@ -113,25 +113,25 @@ func testExpiryRules() {
 	}
 
 	for i, testCase := range testCases {
-		execTestDeletionRules(i, testCase)
+		execTestExpiry(i, testCase)
 	}
 
 }
 
-func execTestDeletionRules(i int, testCase struct {
+func execTestExpiry(i int, testCase struct {
 	lConfig     *s3.BucketLifecycleConfiguration
 	object      string
 	expDeletion bool
 }) {
 	// initialize logging params
 	startTime := time.Now()
-	function := "testExpiryRules"
+	function := "testExpiry"
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	args := map[string]interface{}{
-		"testCase":      i,
-		"bucketName":    bucketName,
-		"objectName":    testCase.object,
-		"expTransition": testCase.expDeletion,
+		"testCase":    i,
+		"bucketName":  bucketName,
+		"objectName":  testCase.object,
+		"expDeletion": testCase.expDeletion,
 	}
 	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
 		Bucket: aws.String(bucketName),
