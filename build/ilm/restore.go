@@ -290,7 +290,6 @@ func testRestoreMultipart() {
 	}
 
 	err = f.Close()
-
 	if err != nil {
 		failureLog(function, args, startTime, "", "Failed to close file after reading", err).Error()
 		return
@@ -364,6 +363,8 @@ func testRestoreMultipart() {
 			return
 		}
 
+		defer result.Body.Close() // fixed number of loops
+
 		if result.StorageClass != nil && *(result.StorageClass) == tierName {
 			break
 		}
@@ -417,6 +418,8 @@ func testRestoreMultipart() {
 		if err != nil {
 			continue
 		}
+
+		defer resultAfterRestore.Body.Close() // fixed number of loops
 
 		if resultAfterRestore.Restore == nil {
 			continue
