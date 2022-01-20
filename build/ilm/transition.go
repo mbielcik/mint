@@ -23,8 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -364,8 +362,8 @@ func execTestExpireTransitioned(i int, testCase struct {
 			return
 		}
 
-		if result.StorageClass == nil || *(result.StorageClass) != tierName {
-			continue
+		if result.StorageClass != nil && *(result.StorageClass) == tierName {
+			break
 		}
 
 		time.Sleep(300 * time.Millisecond)
@@ -420,193 +418,6 @@ func execTestExpireTransitioned(i int, testCase struct {
 
 	if testCase.expDeletion {
 		failureLog(function, args, startTime, "", "Expected object to be deleted", nil).Error()
-		return
-	}
-
-	successLogger(function, args, startTime).Info()
-}
-
-// Tests ilm restore object
-func testRestore() {
-	// initialize logging params
-	startTime := time.Now()
-	function := "testRestore"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
-	objectName := "object"
-	args := map[string]interface{}{
-		"bucketName": bucketName,
-		"objectName": objectName,
-	}
-
-	lConfigTransition := &s3.BucketLifecycleConfiguration{
-		Rules: []*s3.LifecycleRule{
-			{
-				ID:     aws.String("transitiondateinpast"),
-				Status: aws.String("Enabled"),
-				Transitions: []*s3.Transition{
-					{
-						Date:         aws.Time(time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)),
-						StorageClass: aws.String(tierName),
-					},
-				},
-				Filter: &s3.LifecycleRuleFilter{
-					Prefix: aws.String(""),
-				},
-			},
-		},
-	}
-
-	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
-		Bucket: aws.String(bucketName),
-	})
-	if err != nil {
-		failureLog(function, args, startTime, "", "CreateBucket Failed", err).Error()
-		return
-	}
-	defer addCleanBucket(bucketName, function, args, startTime)
-
-	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
-		Bucket:                 aws.String(bucketName),
-		LifecycleConfiguration: lConfigTransition,
-	})
-	if err != nil {
-		failureLog(function, args, startTime, "", "Put LifecycleConfiguration for transitioning failed", err).Error()
-		return
-	}
-
-	putInput1 := &s3.PutObjectInput{
-		Body:   aws.ReadSeekCloser(strings.NewReader("my content 1")),
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-	}
-	_, err = s3Client.PutObject(putInput1)
-	if err != nil {
-		failureLog(function, args, startTime, "", "PUT expected to succeed but failed", err).Error()
-		return
-	}
-
-	getInput := &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-	}
-
-	// wait some time before getting object the first time
-	// transition is an async process
-	time.Sleep(1 * time.Second)
-
-	// get with 3 retries
-	var result *s3.GetObjectOutput
-	for i := 0; i < 3; i++ {
-		result, err = s3Client.GetObject(getInput)
-		if err != nil {
-			failureLog(function, args, startTime, "", "GET expected to succeed but failed", err).Error()
-			return
-		}
-
-		if result.StorageClass == nil || *(result.StorageClass) != tierName {
-			continue
-		}
-
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	if result.StorageClass == nil || *(result.StorageClass) != tierName {
-		failureLog(function, args, startTime, "", "Expected object to be transitioned.", nil).Error()
-		return
-	}
-
-	if result.Restore != nil {
-		failureLog(function, args, startTime, "", "Expected restore header to be empty.", nil).Error()
-		return
-	}
-
-	body, err := ioutil.ReadAll(result.Body)
-	if err != nil {
-		failureLog(function, args, startTime, "", "Expected to return data but failed", err).Error()
-		return
-	}
-	_ = result.Body.Close()
-
-	if string(body) != "my content 1" {
-		failureLog(function, args, startTime, "", "Unexpected body content", err).Error()
-		return
-	}
-
-	_, err = s3Client.RestoreObject(&s3.RestoreObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-		RestoreRequest: &s3.RestoreRequest{
-			Days: aws.Int64(1),
-		},
-	})
-	if err != nil {
-		failureLog(function, args, startTime, "", "Restore object failed", err).Error()
-		return
-	}
-
-	getInputAfterRestore := &s3.GetObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-	}
-
-	// get with 5 retries
-	var resultAfterRestore *s3.GetObjectOutput
-	for i := 0; i < 5; i++ {
-		resultAfterRestore, err = s3Client.GetObject(getInputAfterRestore)
-		if err != nil {
-			continue
-		}
-
-		if resultAfterRestore.Restore == nil {
-			continue
-		}
-
-		time.Sleep(time.Second)
-	}
-
-	if err != nil {
-		failureLog(function, args, startTime, "", "Failed to get object after restore", nil).Error()
-		return
-	}
-
-	if resultAfterRestore.Restore == nil {
-		failureLog(function, args, startTime, "", "Expected restore header to be set.", nil).Error()
-		return
-	}
-
-	restoreHeader := *resultAfterRestore.Restore
-	var restoreRegex = regexp.MustCompile(`ongoing-request="(.*?)"(, expiry-date="(.*?)")?`)
-	matches := restoreRegex.FindStringSubmatch(restoreHeader)
-	if len(matches) != 4 {
-		failureLog(function, args, startTime, "", "Expected restore header contain ongoing-request status and expiry-date.", nil).Error()
-		return
-	}
-
-	if matches[1] != "false" {
-		failureLog(function, args, startTime, "", "Expected status in restore header should be 'false'.", nil).Error()
-		return
-	}
-
-	expiry, err := time.Parse(http.TimeFormat, matches[3])
-	if err != nil {
-		failureLog(function, args, startTime, "", "Expected 'expiry-date' cannot be parsed.", err).Error()
-		return
-	}
-
-	if expiry != time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, 2) {
-		failureLog(function, args, startTime, "", "Expected 'expiry-date' should be mignight in 2 days.", nil).Error()
-		return
-	}
-
-	bodyAfterRestore, err := ioutil.ReadAll(resultAfterRestore.Body)
-	if err != nil {
-		failureLog(function, args, startTime, "", "Expected to return data after restore but failed", err).Error()
-		return
-	}
-	_ = resultAfterRestore.Body.Close()
-
-	if string(bodyAfterRestore) != "my content 1" {
-		failureLog(function, args, startTime, "", "Unexpected body content after restore", err).Error()
 		return
 	}
 

@@ -47,6 +47,17 @@ const (
 	FAIL = "FAIL" // Indicate that a test failed
 )
 
+// Create a testfile
+func createTestfile(size int64, name string) {
+	f, err := os.Create(name)
+	if err != nil {
+		log.Fatal("Failed to create testfile")
+	}
+	if err := f.Truncate(size); err != nil {
+		log.Fatal("Failed to truncate")
+	}
+}
+
 type mintJSONFormatter struct {
 }
 
