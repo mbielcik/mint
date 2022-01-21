@@ -163,13 +163,143 @@ func testExpireCurrentVersion() {
 }
 
 func testExpireNonCurrentVersions() {
+	testCases := []struct {
+		nCurrentDaysCfg int64
+		objects         []struct {
+			content     string
+			isCurrent   bool
+			expDeletion bool
+			modTime     time.Time
+		}
+	}{
+		// Testcase 0 - current and the first non current do not get deleted
+		{
+			nCurrentDaysCfg: 2,
+			objects: []struct {
+				content     string
+				isCurrent   bool
+				expDeletion bool
+				modTime     time.Time
+			}{
+				{
+					content:     "my content 1",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
+				},
+				{
+					content:     "my content 2",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -4),
+				},
+				{
+					content:     "my content 3",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -3),
+				},
+				{
+					content:     "my content 4",
+					isCurrent:   true,
+					expDeletion: false,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2),
+				},
+			},
+		},
+
+		// Testcase 1 - all non current get deleted
+		{
+			nCurrentDaysCfg: 1,
+			objects: []struct {
+				content     string
+				isCurrent   bool
+				expDeletion bool
+				modTime     time.Time
+			}{
+				{
+					content:     "my content 1",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
+				},
+				{
+					content:     "my content 2",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -4),
+				},
+				{
+					content:     "my content 3",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -3),
+				},
+				{
+					content:     "my content 4",
+					isCurrent:   true,
+					expDeletion: false,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2),
+				},
+			},
+		},
+
+		// Testcase 2 - outdated current does not get deleted
+		{
+			nCurrentDaysCfg: 1,
+			objects: []struct {
+				content     string
+				isCurrent   bool
+				expDeletion bool
+				modTime     time.Time
+			}{
+				{
+					content:     "my content 1",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -8),
+				},
+				{
+					content:     "my content 2",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -7),
+				},
+				{
+					content:     "my content 3",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -6),
+				},
+				{
+					content:     "my content 4",
+					isCurrent:   true,
+					expDeletion: false,
+					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
+				},
+			},
+		},
+	}
+
+	//for i, testCase := range testCases {
+	//	execTestExpireNonCurrentVersions(i, testCase.nCurrentDaysCfg, testCase.objects)
+	//}
+	execTestExpireNonCurrentVersions(0, testCases[1].nCurrentDaysCfg, testCases[1].objects)
+}
+
+func execTestExpireNonCurrentVersions(testIdx int, nCurrentDaysCfg int64, testObjects []struct {
+	content     string
+	isCurrent   bool
+	expDeletion bool
+	modTime     time.Time
+}) {
 	lConfigPast := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
 				ID:     aws.String("expirydeletemarkers"),
 				Status: aws.String("Enabled"),
 				NoncurrentVersionExpiration: &s3.NoncurrentVersionExpiration{
-					NoncurrentDays: aws.Int64(2),
+					NoncurrentDays: aws.Int64(nCurrentDaysCfg),
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String(""),
@@ -183,38 +313,9 @@ func testExpireNonCurrentVersions() {
 	function := "testExpireNonCurrentVersions"
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	objectName := "object"
-	objects := []struct {
-		content     string
-		isCurrent   bool
-		expDeletion bool
-		modTime     time.Time
-	}{
-		{
-			content:     "my content 1",
-			isCurrent:   false,
-			expDeletion: true,
-			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
-		},
-		{
-			content:     "my content 2",
-			isCurrent:   false,
-			expDeletion: true,
-			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -4),
-		},
-		{
-			content:     "my content 3",
-			isCurrent:   false,
-			expDeletion: false,
-			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -3),
-		},
-		{
-			content:     "my content 4",
-			isCurrent:   true,
-			expDeletion: false,
-			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2),
-		},
-	}
+
 	args := map[string]interface{}{
+		"testCase":   testIdx,
 		"bucketName": bucketName,
 		"objectName": objectName,
 	}
@@ -239,8 +340,8 @@ func testExpireNonCurrentVersions() {
 		return
 	}
 
-	putResults := make([]minio.UploadInfo, 0, len(objects))
-	for i, object := range objects {
+	putResults := make([]minio.UploadInfo, 0, len(testObjects))
+	for i, object := range testObjects {
 		putResult, err := minioClient.PutObject(
 			context.Background(),
 			bucketName,
@@ -270,7 +371,7 @@ func testExpireNonCurrentVersions() {
 		return
 	}
 
-	for i, object := range objects {
+	for i, object := range testObjects {
 		getVersionedInput := &s3.GetObjectInput{
 			Bucket:    aws.String(bucketName),
 			Key:       aws.String(objectName),
@@ -324,7 +425,7 @@ func testExpireNonCurrentVersions() {
 
 	currentVerIdx := 0
 	expVersionsIdx := make([]int, 0)
-	for i, object := range objects {
+	for i, object := range testObjects {
 		if !object.expDeletion {
 			expVersionsIdx = append(expVersionsIdx, i)
 		}
