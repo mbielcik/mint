@@ -56,8 +56,7 @@ func testExpireCurrentVersion() {
 	function := "testExpireCurrentVersion"
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	objectName := "object"
-	objectContent1 := "my content 1"
-	objectContent2 := "my content 2"
+	contents := []string{"my content 1", "my content 2"}
 	args := map[string]interface{}{
 		"bucketName": bucketName,
 		"objectName": objectName,
@@ -84,26 +83,20 @@ func testExpireCurrentVersion() {
 		return
 	}
 
-	putInput1 := &s3.PutObjectInput{
-		Body:   aws.ReadSeekCloser(strings.NewReader(objectContent1)),
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-	}
-	putOutput1, err := s3Client.PutObject(putInput1)
-	if err != nil {
-		failureLog(function, args, startTime, "", "PUT expected to succeed but failed", err).Error()
-		return
-	}
+	putOutputs := make([]*s3.PutObjectOutput, 0, len(contents))
+	for i, content := range contents {
+		putInput := &s3.PutObjectInput{
+			Body:   aws.ReadSeekCloser(strings.NewReader(content)),
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(objectName),
+		}
+		putOutput, err := s3Client.PutObject(putInput)
+		if err != nil {
+			failureLog(function, args, startTime, "", fmt.Sprintf("PUT (%d) expected to succeed but failed", i), err).Error()
+			return
+		}
 
-	putInput2 := &s3.PutObjectInput{
-		Body:   aws.ReadSeekCloser(strings.NewReader(objectContent2)),
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-	}
-	putOutput2, err := s3Client.PutObject(putInput2)
-	if err != nil {
-		failureLog(function, args, startTime, "", "PUT expected to succeed but failed", err).Error()
-		return
+		putOutputs = append(putOutputs, putOutput)
 	}
 
 	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
@@ -120,77 +113,50 @@ func testExpireCurrentVersion() {
 		Key:    aws.String(objectName),
 	}
 
-	foundCurrent := false
-	for i := 0; i < 3; i++ {
-		_, err = s3Client.GetObject(getInput)
-		if err != nil {
-			aerr, ok := err.(awserr.Error)
-			if !ok {
-				failureLog(function, args, startTime, "", "Unexpected non aws error on GetObject", err).Error()
-				return
-			}
-			if aerr.Code() == "NotFound" {
-				foundCurrent = false
-				break
-			}
-		}
+	// trigger lifecycle and wait
+	_, _ = s3Client.GetObject(getInput)
+	time.Sleep(time.Second)
 
-		foundCurrent = true
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	if foundCurrent {
+	_, err = s3Client.GetObject(getInput)
+	if err == nil {
 		failureLog(function, args, startTime, "", "Expected current object version to be deleted", nil).Error()
 		return
 	}
-
-	// Get the older version, make sure it is preserved
-	getInput1 := &s3.GetObjectInput{
-		Bucket:    aws.String(bucketName),
-		Key:       aws.String(objectName),
-		VersionId: aws.String(*putOutput1.VersionId),
+	aerr, ok := err.(awserr.Error)
+	if !ok {
+		failureLog(function, args, startTime, "", "Unexpected non aws error on GetObject", err).Error()
+		return
 	}
-
-	getVer1Result, err := s3Client.GetObject(getInput1)
-	if err != nil {
-		failureLog(function, args, startTime, "", fmt.Sprintf("GetObject ver1 expected to succeed but failed with %v", err), err).Error()
+	if aerr.Code() != "NoSuchKey" {
+		failureLog(function, args, startTime, "", "Unexpected aws error on GetObject", err).Error()
 		return
 	}
 
-	bodyVer1, err := ioutil.ReadAll(getVer1Result.Body)
-	if err != nil {
-		failureLog(function, args, startTime, "", fmt.Sprintf("GetObject ver1 expected to return data but failed with %v", err), err).Error()
-		return
-	}
-	getVer1Result.Body.Close()
+	// Get the older versions, make sure it is preserved
+	for i, output := range putOutputs {
+		getVersionInput := &s3.GetObjectInput{
+			Bucket:    aws.String(bucketName),
+			Key:       aws.String(objectName),
+			VersionId: aws.String(*output.VersionId),
+		}
 
-	if string(bodyVer1) != objectContent1 {
-		failureLog(function, args, startTime, "", "GetObject ver1 unexpected body content", nil).Error()
-		return
-	}
+		getVersionResult, err := s3Client.GetObject(getVersionInput)
+		if err != nil {
+			failureLog(function, args, startTime, "", fmt.Sprintf("GetObject (%d) expected to succeed but failed.", i), err).Error()
+			return
+		}
 
-	getInput2 := &s3.GetObjectInput{
-		Bucket:    aws.String(bucketName),
-		Key:       aws.String(objectName),
-		VersionId: aws.String(*putOutput2.VersionId),
-	}
+		body, err := ioutil.ReadAll(getVersionResult.Body)
+		if err != nil {
+			failureLog(function, args, startTime, "", fmt.Sprintf("GetObject (%d) expected to return data but failed.", i), err).Error()
+			return
+		}
+		_ = getVersionResult.Body.Close()
 
-	getVer2Result, err := s3Client.GetObject(getInput2)
-	if err != nil {
-		failureLog(function, args, startTime, "", fmt.Sprintf("GetObject ver2 expected to succeed but failed with %v", err), err).Error()
-		return
-	}
-
-	bodyVer2, err := ioutil.ReadAll(getVer2Result.Body)
-	if err != nil {
-		failureLog(function, args, startTime, "", fmt.Sprintf("GetObject ver2 expected to return data but failed with %v", err), err).Error()
-		return
-	}
-	getVer2Result.Body.Close()
-
-	if string(bodyVer2) != objectContent2 {
-		failureLog(function, args, startTime, "", "GetObject ver2 unexpected body content", nil).Error()
-		return
+		if string(body) != contents[i] {
+			failureLog(function, args, startTime, "", fmt.Sprintf("GetObject (%d) unexpected body content", i), nil).Error()
+			return
+		}
 	}
 
 	successLogger(function, args, startTime).Info()
@@ -217,8 +183,22 @@ func testExpireNonCurrentVersions() {
 	function := "testExpireNonCurrentVersions"
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	objectName := "object"
-	objectContent1 := "my content 1"
-	objectContent2 := "my content 2"
+	objects := []struct {
+		content   string
+		isCurrent bool
+		modTime   time.Time
+	}{
+		{
+			content:   "my content 1",
+			isCurrent: false,
+			modTime:   time.Now().Add(-3 * 24 * time.Hour),
+		},
+		{
+			content:   "my content 2",
+			isCurrent: true,
+			modTime:   time.Now().Add(-2 * 24 * time.Hour),
+		},
+	}
 	args := map[string]interface{}{
 		"bucketName": bucketName,
 		"objectName": objectName,
@@ -244,38 +224,26 @@ func testExpireNonCurrentVersions() {
 		return
 	}
 
-	putResult1, err := minioClient.PutObject(
-		context.Background(),
-		bucketName,
-		objectName,
-		strings.NewReader(objectContent1),
-		int64(len(objectContent1)),
-		minio.PutObjectOptions{
-			Internal: minio.AdvancedPutOptions{
-				SourceMTime: time.Now().Add(-3 * 24 * time.Hour),
+	putResults := make([]minio.UploadInfo, 0, len(objects))
+	for i, object := range objects {
+		putResult, err := minioClient.PutObject(
+			context.Background(),
+			bucketName,
+			objectName,
+			strings.NewReader(object.content),
+			int64(len(object.content)),
+			minio.PutObjectOptions{
+				Internal: minio.AdvancedPutOptions{
+					SourceMTime: object.modTime,
+				},
 			},
-		},
-	)
-	if err != nil {
-		failureLog(function, args, startTime, "", "PUT ver1 expected to succeed but failed", err).Error()
-		return
-	}
+		)
+		if err != nil {
+			failureLog(function, args, startTime, "", fmt.Sprintf("PUT (%d) expected to succeed but failed", i), err).Error()
+			return
+		}
 
-	putResult2, err := minioClient.PutObject(
-		context.Background(),
-		bucketName,
-		objectName,
-		strings.NewReader(objectContent2),
-		int64(len(objectContent2)),
-		minio.PutObjectOptions{
-			Internal: minio.AdvancedPutOptions{
-				SourceMTime: time.Now().Add(-2 * 24 * time.Hour),
-			},
-		},
-	)
-	if err != nil {
-		failureLog(function, args, startTime, "", "PUT ver2 expected to succeed but failed", err).Error()
-		return
+		putResults = append(putResults, putResult)
 	}
 
 	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
@@ -287,71 +255,41 @@ func testExpireNonCurrentVersions() {
 		return
 	}
 
-	getInputNonCurrent := &s3.GetObjectInput{
-		Bucket:    aws.String(bucketName),
-		Key:       aws.String(objectName),
-		VersionId: aws.String(putResult1.VersionID),
-	}
+	for i, object := range objects {
+		getVersionedInput := &s3.GetObjectInput{
+			Bucket:    aws.String(bucketName),
+			Key:       aws.String(objectName),
+			VersionId: aws.String(putResults[i].VersionID),
+		}
 
-	foundNonCurrent := false
-	for i := 0; i < 3; i++ {
-		_, err = s3Client.GetObject(getInputNonCurrent)
+		// trigger lifecycle and wait
+		_, _ = s3Client.GetObject(getVersionedInput)
+		time.Sleep(time.Second)
+
+		_, err = s3Client.GetObject(getVersionedInput)
+		objectFound := true
 		if err != nil {
 			aerr, ok := err.(awserr.Error)
 			if !ok {
-				failureLog(function, args, startTime, "", "Unexpected non aws error on GetObject", err).Error()
+				failureLog(function, args, startTime, "", fmt.Sprintf("Unexpected non aws error on GetObject (%d)", i), err).Error()
 				return
 			}
-			if aerr.Code() == "NotFound" {
-				foundNonCurrent = false
-				break
+			if aerr.Code() != "NoSuchVersion" {
+				failureLog(function, args, startTime, "", fmt.Sprintf("Unexpected aws error on GetObject (%d)", i), err).Error()
+				return
 			}
+			objectFound = false
+		}
 
-			failureLog(function, args, startTime, "", "Unexpected aws error on GetObject", err).Error()
+		if object.isCurrent && !objectFound {
+			failureLog(function, args, startTime, "", fmt.Sprintf("Expected current object (%d) to be found.", i), err).Error()
 			return
 		}
 
-		foundNonCurrent = true
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	if foundNonCurrent {
-		failureLog(function, args, startTime, "", "Expected non current object version to be deleted", nil).Error()
-		return
-	}
-
-	getInputCurrent := &s3.GetObjectInput{
-		Bucket:    aws.String(bucketName),
-		Key:       aws.String(objectName),
-		VersionId: aws.String(putResult2.VersionID),
-	}
-
-	foundCurrent := false
-	for i := 0; i < 3; i++ {
-		_, err = s3Client.GetObject(getInputCurrent)
-		if err != nil {
-			aerr, ok := err.(awserr.Error)
-			if !ok {
-				failureLog(function, args, startTime, "", "Unexpected non aws error on GetObject", err).Error()
-				return
-			}
-			if aerr.Code() == "NotFound" {
-				foundNonCurrent = false
-				time.Sleep(300 * time.Millisecond)
-				continue
-			}
-
-			failureLog(function, args, startTime, "", "Unexpected aws error on GetObject", err).Error()
+		if !object.isCurrent && objectFound {
+			failureLog(function, args, startTime, "", fmt.Sprintf("Expected non current object version (%d) to be deleted", i), nil).Error()
 			return
 		}
-
-		foundCurrent = true
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	if !foundCurrent {
-		failureLog(function, args, startTime, "", "Expected non current object version to be deleted", nil).Error()
-		return
 	}
 
 	getVerInput := &s3.ListObjectVersionsInput{
@@ -364,21 +302,37 @@ func testExpireNonCurrentVersions() {
 		return
 	}
 
-	if len(listVerResult.DeleteMarkers) != 0 || len(listVerResult.Versions) != 1 {
-		failureLog(function, args, startTime, "", "Expected ListObjectVersions to return only 1 version and no DeleteMarkers.",
-			nil).Error()
+	if len(listVerResult.DeleteMarkers) != 0 {
+		failureLog(function, args, startTime, "", "Expected ListObjectVersions to no DeleteMarkers.", nil).Error()
 		return
 	}
 
-	if listVerResult.Versions[0].VersionId == nil || putResult2.VersionID != *(listVerResult.Versions[0].VersionId) {
-		failureLog(function, args, startTime, "", "Expected version does not match.",
-			nil).Error()
+	if len(listVerResult.Versions) != 1 {
+		failureLog(function, args, startTime, "", "Expected ListObjectVersions to return only the current version.", nil).Error()
 		return
+	}
+
+	resultVer := listVerResult.Versions[0].VersionId
+	if resultVer == nil {
+		failureLog(function, args, startTime, "", "Expected versionId to be not empty.", nil).Error()
+		return
+	}
+
+	for i, object := range objects {
+		if object.isCurrent {
+			if putResults[i].VersionID != *resultVer {
+				failureLog(function, args, startTime, "", fmt.Sprintf("Expected current version to be %s.", *resultVer), nil).Error()
+				return
+			}
+		}
 	}
 
 	successLogger(function, args, startTime).Info()
 }
 
-// wie oben aber objekt löschen und dann die letzten 3 versionen inkl. deletemarker abfragen
-// es sollte nichts mehr übrig sein. evtl mit listobjectversions
-// testExpireDeleteMarkers
+// like testExpireNonCurrentVersions, but delete the object after
+// the two put calls, then get all 3 versions to trigger the lc rules
+// nothing, not even the delete marker should exist anymore
+// maybe also check with listobjectversions
+// func testExpireDeleteMarkers() {
+// }
