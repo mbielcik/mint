@@ -169,7 +169,7 @@ func testExpireNonCurrentVersions() {
 				ID:     aws.String("expirydeletemarkers"),
 				Status: aws.String("Enabled"),
 				NoncurrentVersionExpiration: &s3.NoncurrentVersionExpiration{
-					NoncurrentDays: aws.Int64(1),
+					NoncurrentDays: aws.Int64(2),
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String(""),
@@ -184,19 +184,34 @@ func testExpireNonCurrentVersions() {
 	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	objectName := "object"
 	objects := []struct {
-		content   string
-		isCurrent bool
-		modTime   time.Time
+		content     string
+		isCurrent   bool
+		expDeletion bool
+		modTime     time.Time
 	}{
 		{
-			content:   "my content 1",
-			isCurrent: false,
-			modTime:   time.Now().Add(-3 * 24 * time.Hour),
+			content:     "my content 1",
+			isCurrent:   false,
+			expDeletion: true,
+			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
 		},
 		{
-			content:   "my content 2",
-			isCurrent: true,
-			modTime:   time.Now().Add(-2 * 24 * time.Hour),
+			content:     "my content 2",
+			isCurrent:   false,
+			expDeletion: true,
+			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -4),
+		},
+		{
+			content:     "my content 3",
+			isCurrent:   false,
+			expDeletion: false,
+			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -3),
+		},
+		{
+			content:     "my content 4",
+			isCurrent:   true,
+			expDeletion: false,
+			modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2),
 		},
 	}
 	args := map[string]interface{}{
@@ -281,13 +296,13 @@ func testExpireNonCurrentVersions() {
 			objectFound = false
 		}
 
-		if object.isCurrent && !objectFound {
-			failureLog(function, args, startTime, "", fmt.Sprintf("Expected current object (%d) to be found.", i), err).Error()
+		if !object.expDeletion && !objectFound {
+			failureLog(function, args, startTime, "", fmt.Sprintf("Expected object version (%d) to be found.", i), err).Error()
 			return
 		}
 
-		if !object.isCurrent && objectFound {
-			failureLog(function, args, startTime, "", fmt.Sprintf("Expected non current object version (%d) to be deleted", i), nil).Error()
+		if object.expDeletion && objectFound {
+			failureLog(function, args, startTime, "", fmt.Sprintf("Expected object version (%d) to be deleted", i), nil).Error()
 			return
 		}
 	}
@@ -307,24 +322,31 @@ func testExpireNonCurrentVersions() {
 		return
 	}
 
-	if len(listVerResult.Versions) != 1 {
-		failureLog(function, args, startTime, "", "Expected ListObjectVersions to return only the current version.", nil).Error()
-		return
-	}
-
-	resultVer := listVerResult.Versions[0].VersionId
-	if resultVer == nil {
-		failureLog(function, args, startTime, "", "Expected versionId to be not empty.", nil).Error()
-		return
-	}
-
+	currentVerIdx := 0
+	expVersionsIdx := make([]int, 0)
 	for i, object := range objects {
-		if object.isCurrent {
-			if putResults[i].VersionID != *resultVer {
-				failureLog(function, args, startTime, "", fmt.Sprintf("Expected current version to be %s.", *resultVer), nil).Error()
-				return
-			}
+		if !object.expDeletion {
+			expVersionsIdx = append(expVersionsIdx, i)
 		}
+		if object.isCurrent {
+			currentVerIdx = i
+		}
+	}
+
+	if len(listVerResult.Versions) != len(expVersionsIdx) {
+		failureLog(function, args, startTime, "", fmt.Sprintf("Expected ListObjectVersions to return (%d) versions.", len(expVersionsIdx)), nil).Error()
+		return
+	}
+
+	currentVer := listVerResult.Versions[0].VersionId
+	if currentVer == nil {
+		failureLog(function, args, startTime, "", "Expected current versionId to be not empty.", nil).Error()
+		return
+	}
+
+	if putResults[currentVerIdx].VersionID != *currentVer {
+		failureLog(function, args, startTime, "", fmt.Sprintf("Expected current version to be %s.", putResults[currentVerIdx].VersionID), nil).Error()
+		return
 	}
 
 	successLogger(function, args, startTime).Info()
