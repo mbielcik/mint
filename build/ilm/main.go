@@ -18,6 +18,8 @@ package main
 import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	minio "github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"math/rand"
 	"os"
 	"sync"
@@ -32,6 +34,7 @@ import (
 var serverEnvCfg = loadEnvConfig()
 var s3Client *s3.S3
 var tierName string
+var minioClient *minio.Client
 
 func main() {
 	// Output to stdout instead of the default stderr
@@ -46,7 +49,16 @@ func main() {
 	var err error
 	s3Client, err = createS3Client(serverEnvCfg)
 	if err != nil {
-		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to create aws session to connect to minio server.", err).Error()
+		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to create a session with aws-sdk to connect to minio server.", err).Error()
+		return
+	}
+
+	minioClient, err = minio.New(serverEnvCfg.endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(serverEnvCfg.accessKey, serverEnvCfg.secretKey, ""),
+		Secure: serverEnvCfg.secure,
+	})
+	if err != nil {
+		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to connect with minio client.", err).Error()
 		return
 	}
 
@@ -57,6 +69,13 @@ func main() {
 	}
 
 	testExpiry()
+
+	versioningImpl := isPutVersioningConfigurationImplemented()
+	if versioningImpl {
+		testExpireCurrentVersion()
+		testExpireNonCurrentVersions()
+		//testExpireDeleteMarkers()
+	}
 
 	if serverEnvCfg.remoteTierName == "" {
 		ignoreLog("main", map[string]interface{}{}, time.Now(), "No remote tier name given. Therefore ILM-Tiering tests will be skipped. "+
@@ -75,12 +94,16 @@ func main() {
 
 var cleanupWg sync.WaitGroup
 
-func addCleanBucket(bucket string, function string, args map[string]interface{}, startTime time.Time) {
+func addCleanupBucket(bucket string, function string, args map[string]interface{}, startTime time.Time, versioned bool) {
 	cleanupWg.Add(1)
 
 	go func() {
 		defer cleanupWg.Done()
-		cleanupBucket(bucket, function, args, startTime)
+		if versioned {
+			cleanupBucketVersioned(bucket, function, args, startTime)
+		} else {
+			cleanupBucket(bucket, function, args, startTime)
+		}
 	}()
 }
 
@@ -111,6 +134,7 @@ func cleanupBucket(bucket string, function string, args map[string]interface{}, 
 		_, err = s3Client.DeleteBucket(&s3.DeleteBucketInput{
 			Bucket: aws.String(bucket),
 		})
+
 		if err != nil {
 			time.Sleep(5 * time.Second)
 			continue
@@ -122,6 +146,57 @@ func cleanupBucket(bucket string, function string, args map[string]interface{}, 
 	return
 }
 
+func cleanupBucketVersioned(bucket string, function string, args map[string]interface{}, startTime time.Time) {
+	start := time.Now()
+
+	input := &s3.ListObjectVersionsInput{
+		Bucket: aws.String(bucket),
+	}
+
+	var err error
+	for time.Since(start) < 15*time.Minute {
+		err = s3Client.ListObjectVersionsPages(input,
+			func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
+				for _, v := range page.Versions {
+					input := &s3.DeleteObjectInput{
+						Bucket:    &bucket,
+						Key:       v.Key,
+						VersionId: v.VersionId,
+					}
+					_, err := s3Client.DeleteObject(input)
+					if err != nil {
+						return true
+					}
+				}
+				for _, v := range page.DeleteMarkers {
+					input := &s3.DeleteObjectInput{
+						Bucket:    &bucket,
+						Key:       v.Key,
+						VersionId: v.VersionId,
+					}
+					_, err := s3Client.DeleteObject(input)
+					if err != nil {
+						return true
+					}
+				}
+				return true
+			})
+
+		_, err = s3Client.DeleteBucket(&s3.DeleteBucketInput{
+			Bucket: aws.String(bucket),
+		})
+
+		if err != nil {
+			time.Sleep(5 * time.Second)
+			continue
+		}
+		return
+	}
+
+	failureLog(function, args, startTime, "", fmt.Sprintf("Unable to cleanup versioned bucket '%s' after ILM tests", bucket), err).Error()
+	return
+}
+
 func isPutLifecycleConfigurationImplemented() bool {
 	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
 	startTime := time.Now()
@@ -129,7 +204,7 @@ func isPutLifecycleConfigurationImplemented() bool {
 	args := map[string]interface{}{
 		"bucketName": bucket,
 	}
-	defer addCleanBucket(bucket, function, args, startTime)
+	defer addCleanupBucket(bucket, function, args, startTime, false)
 
 	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
 		Bucket: aws.String(bucket),
@@ -162,6 +237,38 @@ func isPutLifecycleConfigurationImplemented() bool {
 				return false
 			}
 		}
+	}
+
+	return true
+}
+
+func isPutVersioningConfigurationImplemented() bool {
+	startTime := time.Now()
+	function := "isPutVersioningConfigurationImplemented"
+	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	args := map[string]interface{}{
+		"bucketName": bucket,
+	}
+
+	defer addCleanupBucket(bucket, function, args, startTime, false)
+
+	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		return false
+	}
+
+	putVersioningInput := &s3.PutBucketVersioningInput{
+		Bucket: aws.String(bucket),
+		VersioningConfiguration: &s3.VersioningConfiguration{
+			Status: aws.String("Enabled"),
+		},
+	}
+
+	_, err = s3Client.PutBucketVersioning(putVersioningInput)
+	if err != nil {
+		return false
 	}
 
 	return true

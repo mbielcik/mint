@@ -140,7 +140,7 @@ func execTestExpiry(i int, testCase struct {
 		failureLog(function, args, startTime, "", "CreateBucket Failed", err).Error()
 		return
 	}
-	defer addCleanBucket(bucketName, function, args, startTime)
+	defer addCleanupBucket(bucketName, function, args, startTime, false)
 
 	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
 		Bucket:                 aws.String(bucketName),
