@@ -107,10 +107,10 @@ func failureLog(function string, args map[string]interface{}, startTime time.Tim
 	var fields log.Fields
 	// log with the fields as per mint
 	if err != nil {
-		fields = log.Fields{"name": "aws-sdk-go", "function": function, "args": args,
+		fields = log.Fields{"name": "ilm", "function": function, "args": args,
 			"duration": duration.Nanoseconds() / 1000000, "status": FAIL, "alert": alert, "message": message, "error": err}
 	} else {
-		fields = log.Fields{"name": "aws-sdk-go", "function": function, "args": args,
+		fields = log.Fields{"name": "ilm", "function": function, "args": args,
 			"duration": duration.Nanoseconds() / 1000000, "status": FAIL, "alert": alert, "message": message}
 	}
 	return log.WithFields(fields)
