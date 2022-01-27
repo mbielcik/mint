@@ -163,9 +163,11 @@ func testExpireCurrentVersion() {
 }
 
 func testExpireNonCurrentVersions() {
+	now := time.Now().UTC()
 	testCases := []struct {
-		nCurrentDaysCfg int64
-		objects         []struct {
+		nonCurrentDaysCfg          *int64
+		newerNonCurrentVersionsCfg *int64
+		objects                    []struct {
 			content     string
 			isCurrent   bool
 			expDeletion bool
@@ -174,7 +176,7 @@ func testExpireNonCurrentVersions() {
 	}{
 		// Testcase 0 - current and the first non current do not get deleted
 		{
-			nCurrentDaysCfg: 2,
+			nonCurrentDaysCfg: aws.Int64(2),
 			objects: []struct {
 				content     string
 				isCurrent   bool
@@ -185,32 +187,46 @@ func testExpireNonCurrentVersions() {
 					content:     "my content 1",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -5),
 				},
 				{
 					content:     "my content 2",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -4),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -4),
 				},
 				{
 					content:     "my content 3",
 					isCurrent:   false,
 					expDeletion: false,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -3),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
 				},
 				{
 					content:     "my content 4",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
+				},
+				{
+					content:     "my content 5",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
+				},
+				{
+					content:     "my content 6",
 					isCurrent:   true,
 					expDeletion: false,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -2),
 				},
 			},
 		},
 
-		// Testcase 1 - all non current get deleted
+		// Testcase 1 - Like in Testcase 0 there are 3 non current versions that are not expired
+		// but due to the 'NewerNoncurrentVersions' configuration only the 2 latest ones should be kept
 		{
-			nCurrentDaysCfg: 1,
+			nonCurrentDaysCfg:          aws.Int64(2),
+			newerNonCurrentVersionsCfg: aws.Int64(2),
 			objects: []struct {
 				content     string
 				isCurrent   bool
@@ -221,32 +237,44 @@ func testExpireNonCurrentVersions() {
 					content:     "my content 1",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -5),
 				},
 				{
 					content:     "my content 2",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -4),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -4),
 				},
 				{
 					content:     "my content 3",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -3),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
 				},
 				{
 					content:     "my content 4",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -2),
+				},
+				{
+					content:     "my content 5",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -1),
+				},
+				{
+					content:     "my content 6",
 					isCurrent:   true,
 					expDeletion: false,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, 0),
 				},
 			},
 		},
 
-		// Testcase 2 - outdated current does not get deleted
+		// Testcase 2 - Only keeps the 3 latest non current versions.
 		{
-			nCurrentDaysCfg: 1,
+			newerNonCurrentVersionsCfg: aws.Int64(3),
 			objects: []struct {
 				content     string
 				isCurrent   bool
@@ -257,37 +285,120 @@ func testExpireNonCurrentVersions() {
 					content:     "my content 1",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -8),
+					modTime:     now.Add(-5 * time.Second),
 				},
 				{
 					content:     "my content 2",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -7),
+					modTime:     now.Add(-4 * time.Second),
+				},
+				{
+					content:     "my content 3",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Add(-3 * time.Second),
+				},
+				{
+					content:     "my content 4",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Add(-2 * time.Second),
+				},
+				{
+					content:     "my content 5",
+					isCurrent:   false,
+					expDeletion: false,
+					modTime:     now.Add(-1 * time.Second),
+				},
+				{
+					content:     "my content 6",
+					isCurrent:   true,
+					expDeletion: false,
+					modTime:     now,
+				},
+			},
+		},
+
+		// Testcase 3 - all non current get deleted
+		{
+			nonCurrentDaysCfg: aws.Int64(1),
+			objects: []struct {
+				content     string
+				isCurrent   bool
+				expDeletion bool
+				modTime     time.Time
+			}{
+				{
+					content:     "my content 1",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -5),
+				},
+				{
+					content:     "my content 2",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -4),
 				},
 				{
 					content:     "my content 3",
 					isCurrent:   false,
 					expDeletion: true,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -6),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
 				},
 				{
 					content:     "my content 4",
 					isCurrent:   true,
 					expDeletion: false,
-					modTime:     time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -5),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -2),
+				},
+			},
+		},
+
+		// Testcase 4 - outdated current does not get deleted
+		{
+			nonCurrentDaysCfg: aws.Int64(1),
+			objects: []struct {
+				content     string
+				isCurrent   bool
+				expDeletion bool
+				modTime     time.Time
+			}{
+				{
+					content:     "my content 1",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -8),
+				},
+				{
+					content:     "my content 2",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -7),
+				},
+				{
+					content:     "my content 3",
+					isCurrent:   false,
+					expDeletion: true,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -6),
+				},
+				{
+					content:     "my content 4",
+					isCurrent:   true,
+					expDeletion: false,
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -5),
 				},
 			},
 		},
 	}
 
-	//for i, testCase := range testCases {
-	//	execTestExpireNonCurrentVersions(i, testCase.nCurrentDaysCfg, testCase.objects)
-	//}
-	execTestExpireNonCurrentVersions(0, testCases[1].nCurrentDaysCfg, testCases[1].objects)
+	for i, testCase := range testCases {
+		execTestExpireNonCurrentVersions(i, testCase.nonCurrentDaysCfg, testCase.newerNonCurrentVersionsCfg, testCase.objects)
+	}
 }
 
-func execTestExpireNonCurrentVersions(testIdx int, nCurrentDaysCfg int64, testObjects []struct {
+func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, newerNonCurrentVersionsCfg *int64, testObjects []struct {
 	content     string
 	isCurrent   bool
 	expDeletion bool
@@ -299,7 +410,8 @@ func execTestExpireNonCurrentVersions(testIdx int, nCurrentDaysCfg int64, testOb
 				ID:     aws.String("expirydeletemarkers"),
 				Status: aws.String("Enabled"),
 				NoncurrentVersionExpiration: &s3.NoncurrentVersionExpiration{
-					NoncurrentDays: aws.Int64(nCurrentDaysCfg),
+					NoncurrentDays:          nonCurrentDaysCfg,
+					NewerNoncurrentVersions: newerNonCurrentVersionsCfg,
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String(""),
@@ -435,7 +547,7 @@ func execTestExpireNonCurrentVersions(testIdx int, nCurrentDaysCfg int64, testOb
 	}
 
 	if len(listVerResult.Versions) != len(expVersionsIdx) {
-		failureLog(function, args, startTime, "", fmt.Sprintf("Expected ListObjectVersions to return (%d) versions.", len(expVersionsIdx)), nil).Error()
+		failureLog(function, args, startTime, "", fmt.Sprintf("Expected ListObjectVersions to return (%d) versions, but (%d) were returned.", len(expVersionsIdx), len(listVerResult.Versions)), nil).Error()
 		return
 	}
 
