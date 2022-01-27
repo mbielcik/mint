@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,15 +158,15 @@ type envConfig struct {
 }
 
 func loadEnvConfig() envConfig {
-	endpoint := os.Getenv(fmt.Sprintf("SERVER_ENDPOINT"))
-	accessKey := os.Getenv(fmt.Sprintf("ACCESS_KEY"))
-	secretKey := os.Getenv(fmt.Sprintf("SECRET_KEY"))
-	secureVal := os.Getenv(fmt.Sprintf("ENABLE_HTTPS"))
+	endpoint := os.Getenv("SERVER_ENDPOINT")
+	accessKey := os.Getenv("ACCESS_KEY")
+	secretKey := os.Getenv("SECRET_KEY")
+	secureVal := os.Getenv("ENABLE_HTTPS")
 	sdkEndpoint := "http://" + endpoint
 	if secureVal == "1" {
 		sdkEndpoint = "https://" + endpoint
 	}
-	remoteTierName := os.Getenv(fmt.Sprintf("REMOTE_TIER_NAME"))
+	remoteTierName := os.Getenv("REMOTE_TIER_NAME")
 
 	return envConfig{
 		endpoint:       endpoint,
@@ -175,4 +176,15 @@ func loadEnvConfig() envConfig {
 		sdkEndpoint:    sdkEndpoint,
 		remoteTierName: remoteTierName,
 	}
+}
+
+func getMaxScannerWaitSeconds() int {
+	maxWaitS := os.Getenv("MAX_SCANNER_WAIT_SECONDS")
+	if maxWaitS != "" {
+		if i, err := strconv.Atoi(maxWaitS); err == nil {
+			return i
+		}
+	}
+
+	return 0
 }

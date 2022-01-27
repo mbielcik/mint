@@ -35,6 +35,7 @@ var serverEnvCfg = loadEnvConfig()
 var s3Client *s3.S3
 var tierName string
 var minioClient *minio.Client
+var maxScannerWaitSeconds = 80
 
 func main() {
 	// Output to stdout instead of the default stderr
@@ -46,10 +47,15 @@ func main() {
 	// log Info or above -- success cases are Info level, failures are Error level
 	log.SetLevel(log.InfoLevel)
 
+	waitTimeout := getMaxScannerWaitSeconds()
+	if waitTimeout != 0 {
+		maxScannerWaitSeconds = waitTimeout
+	}
+
 	var err error
 	s3Client, err = createS3Client(serverEnvCfg)
 	if err != nil {
-		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to create a session with aws-sdk to connect to minio server.", err).Error()
+		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to create a session with aws-sdk to connect to minio server.", err).Fatal()
 		return
 	}
 
@@ -58,7 +64,7 @@ func main() {
 		Secure: serverEnvCfg.secure,
 	})
 	if err != nil {
-		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to connect with minio client.", err).Error()
+		failureLog("main", map[string]interface{}{}, time.Now(), "", "Failed to connect with minio client.", err).Fatal()
 		return
 	}
 
@@ -74,7 +80,7 @@ func main() {
 	if versioningImpl {
 		testExpireCurrentVersion()
 		testExpireNonCurrentVersions()
-		//testExpireDeleteMarkers()
+		testDeleteExpiredDeleteMarker()
 	}
 
 	if serverEnvCfg.remoteTierName == "" {

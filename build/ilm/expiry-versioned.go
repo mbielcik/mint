@@ -407,7 +407,7 @@ func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, new
 	lConfigPast := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
-				ID:     aws.String("expirydeletemarkers"),
+				ID:     aws.String("expirynoncurrent"),
 				Status: aws.String("Enabled"),
 				NoncurrentVersionExpiration: &s3.NoncurrentVersionExpiration{
 					NoncurrentDays:          nonCurrentDaysCfg,
@@ -565,9 +565,133 @@ func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, new
 	successLogger(function, args, startTime).Info()
 }
 
-// like testExpireNonCurrentVersions, but delete the object after
-// the two put calls, then get all 3 versions to trigger the lc rules
-// nothing, not even the delete marker should exist anymore
-// maybe also check with listobjectversions
-// func testExpireDeleteMarkers() {
-// }
+func testDeleteExpiredDeleteMarker() {
+	lConfigPast := &s3.BucketLifecycleConfiguration{
+		Rules: []*s3.LifecycleRule{
+			{
+				ID:     aws.String("expirydeletemarkers"),
+				Status: aws.String("Enabled"),
+				Expiration: &s3.LifecycleExpiration{
+					ExpiredObjectDeleteMarker: aws.Bool(true),
+				},
+				NoncurrentVersionExpiration: &s3.NoncurrentVersionExpiration{
+					NoncurrentDays: aws.Int64(1),
+				},
+				Filter: &s3.LifecycleRuleFilter{
+					Prefix: aws.String(""),
+				},
+			},
+		},
+	}
+
+	// initialize logging params
+	startTime := time.Now()
+	function := "testDeleteExpiredDeleteMarker"
+	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	objectName := "object"
+	objectContent := "object content"
+
+	args := map[string]interface{}{
+		"bucketName": bucketName,
+		"objectName": objectName,
+	}
+	_, err := s3Client.CreateBucket(&s3.CreateBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "CreateBucket Failed", err).Error()
+		return
+	}
+	defer addCleanupBucket(bucketName, function, args, startTime, true)
+
+	putVersioningInput := &s3.PutBucketVersioningInput{
+		Bucket: aws.String(bucketName),
+		VersioningConfiguration: &s3.VersioningConfiguration{
+			Status: aws.String("Enabled"),
+		},
+	}
+	_, err = s3Client.PutBucketVersioning(putVersioningInput)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Put VersioningConfiguration failed", err).Error()
+		return
+	}
+
+	putResult, err := minioClient.PutObject(
+		context.Background(),
+		bucketName,
+		objectName,
+		strings.NewReader(objectContent),
+		int64(len(objectContent)),
+		minio.PutObjectOptions{
+			Internal: minio.AdvancedPutOptions{
+				SourceMTime: time.Now().AddDate(0, 0, -10), // old enough to be removed by lifecycle rule
+			},
+		},
+	)
+	if err != nil {
+		failureLog(function, args, startTime, "", "PUT expected to succeed but failed", err).Error()
+		return
+	}
+
+	err = minioClient.RemoveObject(context.Background(), bucketName, objectName, minio.RemoveObjectOptions{
+		Internal: minio.AdvancedRemoveOptions{
+			ReplicationMTime: time.Now().AddDate(0, 0, -10), // old enough to be removed by lifecycle rule
+		},
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "RemoveObject failed", err).Error()
+		return
+	}
+
+	_, err = s3Client.PutBucketLifecycleConfiguration(&s3.PutBucketLifecycleConfigurationInput{
+		Bucket:                 aws.String(bucketName),
+		LifecycleConfiguration: lConfigPast,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "Put LifecycleConfiguration failed", err).Error()
+		return
+	}
+
+	getVersionedInput := &s3.GetObjectInput{
+		Bucket:    aws.String(bucketName),
+		Key:       aws.String(objectName),
+		VersionId: aws.String(putResult.VersionID),
+	}
+
+	// trigger lifecycle to expire all non current versions - after this get the delete marker is an expired delete marker
+	_, _ = s3Client.GetObject(getVersionedInput)
+	time.Sleep(time.Second)
+
+	getVerInput := &s3.ListObjectVersionsInput{
+		Bucket: aws.String(bucketName),
+	}
+
+	waitTime := 0
+	var listVerResult *s3.ListObjectVersionsOutput
+	for waitTime < maxScannerWaitSeconds {
+		listVerResult, err = s3Client.ListObjectVersions(getVerInput)
+		if err != nil {
+			failureLog(function, args, startTime, "", fmt.Sprintf("ListObjectVersions expected to succeed but got %v", err), err).Error()
+			return
+		}
+
+		if len(listVerResult.Versions) != 0 {
+			failureLog(function, args, startTime, "", "Expected to return 0 versions.", nil).Error()
+			return
+		}
+
+		if len(listVerResult.DeleteMarkers) == 0 {
+			break
+		}
+
+		waitTime += 5
+		time.Sleep(5 * time.Second)
+	}
+
+	if len(listVerResult.DeleteMarkers) != 0 {
+		failureLog(function, args, startTime, "", "Expected ListObjectVersions to return no DeleteMarker.", nil).Error()
+		return
+	}
+
+	successLogger(function, args, startTime).Info()
+}
