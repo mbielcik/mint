@@ -20,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"math/rand"
 	"os"
 	"sync"
 	"time"
@@ -204,7 +203,7 @@ func cleanupBucketVersioned(bucket string, function string, args map[string]inte
 }
 
 func isPutLifecycleConfigurationImplemented() bool {
-	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucket := uniqueBucketName()
 	startTime := time.Now()
 	function := "isPutLifecycleConfigurationImplemented"
 	args := map[string]interface{}{
@@ -251,7 +250,7 @@ func isPutLifecycleConfigurationImplemented() bool {
 func isPutVersioningConfigurationImplemented() bool {
 	startTime := time.Now()
 	function := "isPutVersioningConfigurationImplemented"
-	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucket := uniqueBucketName()
 	args := map[string]interface{}{
 		"bucketName": bucket,
 	}

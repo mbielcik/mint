@@ -25,7 +25,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	minio "github.com/minio/minio-go/v7"
 	"io/ioutil"
-	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -55,7 +54,7 @@ func testExpireCurrentVersion() {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testExpireCurrentVersion"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	objectName := "object"
 	contents := []string{"my content 1", "my content 2"}
 	args := map[string]interface{}{
@@ -428,7 +427,7 @@ func execTestExpireNonCurrentVersions(testIdx int, testCase nCTestCase) {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testExpireNonCurrentVersions"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	objectName := "object"
 
 	args := map[string]interface{}{
@@ -599,7 +598,7 @@ func testDeleteExpiredDeleteMarker() {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testDeleteExpiredDeleteMarker"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	objectName := "object"
 	objectContent := "object content"
 

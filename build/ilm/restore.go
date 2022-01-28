@@ -22,7 +22,6 @@ package main
 import (
 	"bytes"
 	"io/ioutil"
-	"math/rand"
 	"net/http"
 	"os"
 	"regexp"
@@ -38,7 +37,7 @@ func testRestore() {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testRestore"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	objectName := "object"
 	args := map[string]interface{}{
 		"bucketName": bucketName,
@@ -225,7 +224,7 @@ func testRestoreMultipart() {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testRestoreMultipart"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	objectName := "object"
 	args := map[string]interface{}{
 		"bucketName": bucketName,
