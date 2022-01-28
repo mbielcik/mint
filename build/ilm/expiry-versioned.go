@@ -27,6 +27,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -162,21 +163,23 @@ func testExpireCurrentVersion() {
 	successLogger(function, args, startTime).Info()
 }
 
+type nCTestCase struct {
+	nonCurrentDaysCfg          *int64
+	newerNonCurrentVersionsCfg *int64
+	objects                    []struct {
+		content     string
+		isCurrent   bool
+		expDeletion bool
+		modTime     time.Time
+	}
+}
+
 func testExpireNonCurrentVersions() {
 	now := time.Now().UTC()
-	testCases := []struct {
-		nonCurrentDaysCfg          *int64
-		newerNonCurrentVersionsCfg *int64
-		objects                    []struct {
-			content     string
-			isCurrent   bool
-			expDeletion bool
-			modTime     time.Time
-		}
-	}{
-		// Testcase 0 - current and the first non current do not get deleted
+	testCases := []nCTestCase{
+		// Testcase 0 - current does not get deleted, the oldest 3 non current objects get deleted
 		{
-			nonCurrentDaysCfg: aws.Int64(2),
+			nonCurrentDaysCfg: aws.Int64(1),
 			objects: []struct {
 				content     string
 				isCurrent   bool
@@ -198,35 +201,36 @@ func testExpireNonCurrentVersions() {
 				{
 					content:     "my content 3",
 					isCurrent:   false,
-					expDeletion: false,
+					expDeletion: true,
 					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
 				},
 				{
 					content:     "my content 4",
 					isCurrent:   false,
 					expDeletion: false,
-					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -2),
 				},
 				{
 					content:     "my content 5",
 					isCurrent:   false,
 					expDeletion: false,
-					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -1),
 				},
 				{
 					content:     "my content 6",
 					isCurrent:   true,
 					expDeletion: false,
-					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -2),
+					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, 0),
 				},
 			},
 		},
 
-		// Testcase 1 - Like in Testcase 0 there are 3 non current versions that are not expired
-		// but due to the 'NewerNoncurrentVersions' configuration only the 2 latest ones should be kept
+		// Testcase 1 - Like in Testcase 0 3 of 5 non current versions should be deleted
+		// but due to the 'NewerNoncurrentVersions' set to 4 the latest 4 non current versions are kept and only the
+		// oldest one will be deleted
 		{
-			nonCurrentDaysCfg:          aws.Int64(2),
-			newerNonCurrentVersionsCfg: aws.Int64(2),
+			nonCurrentDaysCfg:          aws.Int64(1),
+			newerNonCurrentVersionsCfg: aws.Int64(4),
 			objects: []struct {
 				content     string
 				isCurrent   bool
@@ -242,13 +246,13 @@ func testExpireNonCurrentVersions() {
 				{
 					content:     "my content 2",
 					isCurrent:   false,
-					expDeletion: true,
+					expDeletion: false,
 					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -4),
 				},
 				{
 					content:     "my content 3",
 					isCurrent:   false,
-					expDeletion: true,
+					expDeletion: false,
 					modTime:     now.Truncate(24*time.Hour).AddDate(0, 0, -3),
 				},
 				{
@@ -393,25 +397,26 @@ func testExpireNonCurrentVersions() {
 		},
 	}
 
+	var testWg sync.WaitGroup
+	testWg.Add(len(testCases))
 	for i, testCase := range testCases {
-		execTestExpireNonCurrentVersions(i, testCase.nonCurrentDaysCfg, testCase.newerNonCurrentVersionsCfg, testCase.objects)
+		go func(idx int, tCase nCTestCase) {
+			execTestExpireNonCurrentVersions(idx, tCase)
+			defer testWg.Done()
+		}(i, testCase)
 	}
+	testWg.Wait()
 }
 
-func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, newerNonCurrentVersionsCfg *int64, testObjects []struct {
-	content     string
-	isCurrent   bool
-	expDeletion bool
-	modTime     time.Time
-}) {
+func execTestExpireNonCurrentVersions(testIdx int, testCase nCTestCase) {
 	lConfigPast := &s3.BucketLifecycleConfiguration{
 		Rules: []*s3.LifecycleRule{
 			{
 				ID:     aws.String("expirynoncurrent"),
 				Status: aws.String("Enabled"),
 				NoncurrentVersionExpiration: &s3.NoncurrentVersionExpiration{
-					NoncurrentDays:          nonCurrentDaysCfg,
-					NewerNoncurrentVersions: newerNonCurrentVersionsCfg,
+					NoncurrentDays:          testCase.nonCurrentDaysCfg,
+					NewerNoncurrentVersions: testCase.newerNonCurrentVersionsCfg,
 				},
 				Filter: &s3.LifecycleRuleFilter{
 					Prefix: aws.String(""),
@@ -452,8 +457,8 @@ func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, new
 		return
 	}
 
-	putResults := make([]minio.UploadInfo, 0, len(testObjects))
-	for i, object := range testObjects {
+	putResults := make([]minio.UploadInfo, 0, len(testCase.objects))
+	for i, object := range testCase.objects {
 		putResult, err := minioClient.PutObject(
 			context.Background(),
 			bucketName,
@@ -483,7 +488,12 @@ func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, new
 		return
 	}
 
-	for i, object := range testObjects {
+	// this feature relies on the datascanner, so we have to wait for it
+	if testCase.newerNonCurrentVersionsCfg != nil {
+		time.Sleep(time.Duration(maxScannerWaitSeconds) * time.Second)
+	}
+
+	for i, object := range testCase.objects {
 		getVersionedInput := &s3.GetObjectInput{
 			Bucket:    aws.String(bucketName),
 			Key:       aws.String(objectName),
@@ -491,8 +501,10 @@ func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, new
 		}
 
 		// trigger lifecycle and wait
-		_, _ = s3Client.GetObject(getVersionedInput)
-		time.Sleep(time.Second)
+		if testCase.newerNonCurrentVersionsCfg == nil {
+			_, _ = s3Client.GetObject(getVersionedInput)
+			time.Sleep(time.Second)
+		}
 
 		_, err = s3Client.GetObject(getVersionedInput)
 		objectFound := true
@@ -537,7 +549,7 @@ func execTestExpireNonCurrentVersions(testIdx int, nonCurrentDaysCfg *int64, new
 
 	currentVerIdx := 0
 	expVersionsIdx := make([]int, 0)
-	for i, object := range testObjects {
+	for i, object := range testCase.objects {
 		if !object.expDeletion {
 			expVersionsIdx = append(expVersionsIdx, i)
 		}
