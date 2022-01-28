@@ -22,7 +22,6 @@ package main
 import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"io/ioutil"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -135,7 +134,7 @@ func execTestTransition(i int, testCase struct {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testTransition"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	args := map[string]interface{}{
 		"testCase":      i,
 		"bucketName":    bucketName,
@@ -289,7 +288,7 @@ func execTestExpireTransitioned(i int, testCase struct {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testExpireTransitioned"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	args := map[string]interface{}{
 		"testCase":    i,
 		"bucketName":  bucketName,

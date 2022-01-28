@@ -22,7 +22,6 @@ package main
 import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"io/ioutil"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -126,7 +125,7 @@ func execTestExpiry(i int, testCase struct {
 	// initialize logging params
 	startTime := time.Now()
 	function := "testExpiry"
-	bucketName := randString(60, rand.NewSource(time.Now().UnixNano()), "ilm-test-")
+	bucketName := uniqueBucketName()
 	args := map[string]interface{}{
 		"testCase":    i,
 		"bucketName":  bucketName,

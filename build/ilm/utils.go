@@ -30,6 +30,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -187,4 +188,14 @@ func getMaxScannerWaitSeconds() int {
 	}
 
 	return 0
+}
+
+var randSrc = rand.NewSource(time.Now().UnixNano())
+var randMu sync.Mutex
+
+func uniqueBucketName() string {
+	randMu.Lock()
+	defer randMu.Unlock()
+
+	return randString(60, randSrc, "ilm-test-")
 }
