@@ -35,7 +35,7 @@ var serverEnvCfg = loadEnvConfig()
 var s3Client *s3.S3
 var tierName string
 var minioClient *minio.Client
-var maxScannerWaitSeconds = 80
+var maxScannerWaitSeconds = 120
 
 func main() {
 	// Output to stdout instead of the default stderr
