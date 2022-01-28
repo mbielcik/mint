@@ -121,7 +121,7 @@ func cleanupBucket(bucket string, function string, args map[string]interface{}, 
 	}
 
 	var err error
-	for time.Since(start) < 15*time.Minute {
+	for time.Since(start) < 8*time.Minute {
 		err = s3Client.ListObjectsPages(input,
 			func(page *s3.ListObjectsOutput, lastPage bool) bool {
 				for _, o := range page.Contents {
@@ -160,7 +160,7 @@ func cleanupBucketVersioned(bucket string, function string, args map[string]inte
 	}
 
 	var err error
-	for time.Since(start) < 15*time.Minute {
+	for time.Since(start) < 8*time.Minute {
 		err = s3Client.ListObjectVersionsPages(input,
 			func(page *s3.ListObjectVersionsOutput, lastPage bool) bool {
 				for _, v := range page.Versions {
