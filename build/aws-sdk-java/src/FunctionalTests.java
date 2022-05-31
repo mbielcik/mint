@@ -155,7 +155,7 @@ public class FunctionalTests {
                     "Test: uploadObject(String bucketName, String objectName, String f, SSECustomerKey sseKey)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -184,7 +184,7 @@ public class FunctionalTests {
             System.out.println("Test: downloadObject(String bucketName, String objectName, SSECustomerKey sseKey)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -223,7 +223,7 @@ public class FunctionalTests {
                     + "String destBucketName, String dstObjectName, SSECustomerKey sseKey2, boolean replaceDirective)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -260,7 +260,7 @@ public class FunctionalTests {
                     + "String destBucketName, String dstObjectName, SSECustomerKey sseKey2, boolean replaceDirective)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -307,7 +307,7 @@ public class FunctionalTests {
                     + "String destBucketName, String dstObjectName, SSECustomerKey sseKey2, boolean replaceDirective)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -344,7 +344,7 @@ public class FunctionalTests {
                     + "SSECustomerKey sseKey, String expectedMD5, int start, int length)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -381,7 +381,7 @@ public class FunctionalTests {
                     + "SSECustomerKey sseKey, String expectedMD5, int start, int length)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -418,7 +418,7 @@ public class FunctionalTests {
                     + "SSECustomerKey sseKey, String expectedMD5, int start, int length)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -455,7 +455,7 @@ public class FunctionalTests {
                     + "SSECustomerKey sseKey, String expectedMD5, int start, int length)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -492,7 +492,7 @@ public class FunctionalTests {
                     + "SSECustomerKey sseKey, String expectedMD5, int start, int length)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -530,7 +530,7 @@ public class FunctionalTests {
                     + "SSECustomerKey sseKey, String expectedMD5, int start, int length)");
         }
 
-        if (!enableHTTPS) {
+        if (!enableHTTPS || skipSseTests) {
             return;
         }
 
@@ -585,6 +585,7 @@ public class FunctionalTests {
         accessKey = System.getenv("ACCESS_KEY");
         secretKey = System.getenv("SECRET_KEY");
         enableHTTPS = System.getenv("ENABLE_HTTPS").equals("1");
+        skipSseTests = System.getenv("SKIP_SSE_TESTS").equals("1");
 
         region = "us-east-1";
 

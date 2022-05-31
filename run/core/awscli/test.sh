@@ -1229,6 +1229,9 @@ function test_serverside_encryption() {
     if [ "$ENABLE_HTTPS" != "1" ]; then
         return 0
     fi
+    if [ "$SKIP_SSE_TESTS" == "1"]; then
+        return 0
+    fi
     # log start time
     start_time=$(get_time)
 
