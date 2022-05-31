@@ -20,6 +20,7 @@ MINT_DATA_DIR=${MINT_DATA_DIR:-/mint/data}
 MINT_MODE=${MINT_MODE:-core}
 SERVER_REGION=${SERVER_REGION:-us-east-1}
 ENABLE_HTTPS=${ENABLE_HTTPS:-0}
+SKIP_SSE_TESTS=${SKIP_SSE_TESTS:-0}
 ENABLE_VIRTUAL_STYLE=${ENABLE_VIRTUAL_STYLE:-0}
 RUN_ON_FAIL=${RUN_ON_FAIL:-0}
 GO111MODULE=on
@@ -135,6 +136,7 @@ function main()
     export ACCESS_KEY
     export SECRET_KEY
     export ENABLE_HTTPS
+    export SKIP_SSE_TESTS
     export SERVER_REGION
     export ENABLE_VIRTUAL_STYLE
     export RUN_ON_FAIL
@@ -145,6 +147,7 @@ function main()
     echo "ACCESS_KEY:           $ACCESS_KEY"
     echo "SECRET_KEY:           ***REDACTED***"
     echo "ENABLE_HTTPS:         $ENABLE_HTTPS"
+    echo "SKIP_SSE_TESTS"       $SKIP_SSE_TESTS
     echo "SERVER_REGION:        $SERVER_REGION"
     echo "MINT_DATA_DIR:        $MINT_DATA_DIR"
     echo "MINT_MODE:            $MINT_MODE"
