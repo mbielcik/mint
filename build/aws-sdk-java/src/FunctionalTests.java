@@ -57,6 +57,7 @@ public class FunctionalTests {
     private static String region;
     private static String endpoint;
     private static boolean enableHTTPS;
+    private static boolean skipSseTests;
 
     private static final Random random = new Random(new SecureRandom().nextLong());
     private static String bucketName = getRandomName();
