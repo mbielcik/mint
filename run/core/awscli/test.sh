@@ -1305,6 +1305,9 @@ function test_serverside_encryption_multipart() {
     if [ "$ENABLE_HTTPS" != "1" ]; then
         return 0
     fi
+    if [ "$SKIP_SSE_TESTS" == "1"]; then
+        return 0
+    fi
     # log start time
     start_time=$(get_time)
 
@@ -1380,6 +1383,9 @@ function test_serverside_encryption_multipart() {
 function test_serverside_encryption_multipart_copy() {
     #skip server side encryption tests if HTTPS disabled.
     if [ "$ENABLE_HTTPS" != "1" ]; then
+        return 0
+    fi
+    if [ "$SKIP_SSE_TESTS" == "1"]; then
         return 0
     fi
     # log start time
@@ -1469,6 +1475,9 @@ function test_serverside_encryption_get_range() {
     if [ "$ENABLE_HTTPS" != "1" ]; then
         return 0
     fi
+    if [ "$SKIP_SSE_TESTS" == "1"]; then
+        return 0
+    fi
     # log start time
     start_time=$(get_time)
 
@@ -1512,6 +1521,9 @@ function test_serverside_encryption_get_range() {
 function test_serverside_encryption_error() {
     #skip server side encryption tests if HTTPS disabled.
     if [ "$ENABLE_HTTPS" != "1" ]; then
+        return 0
+    fi
+    if [ "$SKIP_SSE_TESTS" == "1"]; then
         return 0
     fi
     # log start time
