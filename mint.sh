@@ -147,7 +147,7 @@ function main()
     echo "ACCESS_KEY:           $ACCESS_KEY"
     echo "SECRET_KEY:           ***REDACTED***"
     echo "ENABLE_HTTPS:         $ENABLE_HTTPS"
-    echo "SKIP_SSE_TESTS"       $SKIP_SSE_TESTS
+    echo "SKIP_SSE_TESTS:       $SKIP_SSE_TESTS"
     echo "SERVER_REGION:        $SERVER_REGION"
     echo "MINT_DATA_DIR:        $MINT_DATA_DIR"
     echo "MINT_MODE:            $MINT_MODE"
