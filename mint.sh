@@ -159,6 +159,17 @@ function main()
 
     [ "$ENABLE_HTTPS" == "1" ] && trust_s3_endpoint_tls_cert
 
+    # Remove default ports 443 and 80 if found.
+    if [[ $SERVER_ENDPOINT == *":"* ]]
+    then
+        PORT=$(echo "$SERVER_ENDPOINT" | cut -d: -f2)
+        if [[ $PORT == "443" || $PORT == "80" ]]
+        then
+            SERVER_ENDPOINT=$(echo "$SERVER_ENDPOINT" | cut -d: -f1)
+            export SERVER_ENDPOINT
+        fi
+    fi
+
     declare -a run_list
     sdks=( "$@" )
 
