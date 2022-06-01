@@ -26,3 +26,4 @@ $WGET --output-document="${test_run_dir}/mc" "https://dl.minio.io/client/mc/rele
 chmod a+x "${test_run_dir}/mc"
 
 $WGET --output-document="$test_run_dir/functional-tests.sh" "https://raw.githubusercontent.com/iternity-dotcom/mc/all-commits/functional-tests.sh"
+chmod a+x "${test_run_dir}/functional-tests.sh"
