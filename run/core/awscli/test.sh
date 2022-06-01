@@ -1232,10 +1232,7 @@ function test_put_object_error() {
 # tests server side encryption headers for get and put calls
 function test_serverside_encryption() {
     #skip server side encryption tests if HTTPS disabled.
-    if [ "$ENABLE_HTTPS" != "1" ]; then
-        return 0
-    fi
-    if [ "$SKIP_SSE_TESTS" == "1"]; then
+    if [[ "$ENABLE_HTTPS" != "1" || "$SKIP_SSE_TESTS" == "1" ]]; then
         return 0
     fi
     # log start time
@@ -1308,10 +1305,7 @@ function test_serverside_encryption() {
 # tests server side encryption headers for multipart put
 function test_serverside_encryption_multipart() {
     #skip server side encryption tests if HTTPS disabled.
-    if [ "$ENABLE_HTTPS" != "1" ]; then
-        return 0
-    fi
-    if [ "$SKIP_SSE_TESTS" == "1"]; then
+    if [[ "$ENABLE_HTTPS" != "1" || "$SKIP_SSE_TESTS" == "1" ]]; then
         return 0
     fi
     # log start time
@@ -1388,10 +1382,7 @@ function test_serverside_encryption_multipart() {
 # differs.
 function test_serverside_encryption_multipart_copy() {
     #skip server side encryption tests if HTTPS disabled.
-    if [ "$ENABLE_HTTPS" != "1" ]; then
-        return 0
-    fi
-    if [ "$SKIP_SSE_TESTS" == "1"]; then
+    if [[ "$ENABLE_HTTPS" != "1" || "$SKIP_SSE_TESTS" == "1" ]]; then
         return 0
     fi
     # log start time
@@ -1478,10 +1469,7 @@ function test_serverside_encryption_multipart_copy() {
 # tests server side encryption headers for range get calls
 function test_serverside_encryption_get_range() {
     #skip server side encryption tests if HTTPS disabled.
-    if [ "$ENABLE_HTTPS" != "1" ]; then
-        return 0
-    fi
-    if [ "$SKIP_SSE_TESTS" == "1"]; then
+    if [[ "$ENABLE_HTTPS" != "1" || "$SKIP_SSE_TESTS" == "1" ]]; then
         return 0
     fi
     # log start time
@@ -1526,10 +1514,7 @@ function test_serverside_encryption_get_range() {
 # tests server side encryption error for get and put calls
 function test_serverside_encryption_error() {
     #skip server side encryption tests if HTTPS disabled.
-    if [ "$ENABLE_HTTPS" != "1" ]; then
-        return 0
-    fi
-    if [ "$SKIP_SSE_TESTS" == "1"]; then
+    if [[ "$ENABLE_HTTPS" != "1" || "$SKIP_SSE_TESTS" == "1" ]]; then
         return 0
     fi
     # log start time
