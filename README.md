@@ -44,7 +44,7 @@ Below environment variables are required to be passed to the docker container. S
 | `MINT_MODE` | (Optional) Set mode indicating what category of tests to be run by values `core`, `full`. Defaults to `core` | `full` |
 | `DOMAIN` | (Optional) Value of MINIO_DOMAIN environment variable used in Minio server | `myminio.com` |
 | `ENABLE_VIRTUAL_STYLE` | (Optional) Set `1` to indicate virtual style access . Defaults to `0` (Path style) | `1` |
-| `RUN_ON_FAIL` | (Optional) Set `1` to indicate execute all tests independent of failures (currently implemented for minio-go and minio-java) . Defaults to `0` (Path style) | `1` |
+| `RUN_ON_FAIL` | (Optional) Set `1` to indicate execute all tests independent of failures (currently implemented for minio-go and minio-java) . Defaults to `0` | `1` |
 | `SKIP_SSE_TESTS` | (Optional) Set `1` to ignore Server Side Encryption tests. Defaults to `0` | `1` |
 
 
@@ -83,7 +83,7 @@ All test logs are stored in `/mint/log/log.json` as multiple JSON document.  Bel
 After making changes to Mint source code a local docker image can be built/run by
 
 ```sh
-$ docker build -t minio/mint . -f Dockerfile.mint
+$ docker build -t minio/mint . -f Dockerfile
 $ docker run -e SERVER_ENDPOINT=play.minio.io:9000 -e ACCESS_KEY=Q3AM3UQ867SPQQA43P2F \
              -e SECRET_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG \
              -e ENABLE_HTTPS=1 -e MINT_MODE=full minio/mint:latest

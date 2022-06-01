@@ -23,4 +23,4 @@ fi
 
 test_run_dir="$MINT_RUN_CORE_DIR/minio-go"
 curl -sL -o "${test_run_dir}/main.go" "https://raw.githubusercontent.com/iternity-dotcom/minio-go/all-commits/functional_tests.go"
-(cd "$test_run_dir" && GO111MODULE=on CGO_ENABLED=0 go build -o minio-go main.go)
+(cd "$test_run_dir" && CGO_ENABLED=0 go build --ldflags "-s -w" -o minio-go main.go)
