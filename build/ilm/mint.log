@@ -1,0 +1,45 @@
+Running with
+SERVER_ENDPOINT:      192.168.178.21:9001
+ACCESS_KEY:           accesskey
+SECRET_KEY:           ***REDACTED***
+ENABLE_HTTPS:         0
+SERVER_REGION:        us-east-1
+MINT_DATA_DIR:        /mint/data
+MINT_MODE:            full
+ENABLE_VIRTUAL_STYLE: 0
+RUN_ON_FAIL:          0
+
+To get logs, run 'docker cp :/mint/log /tmp/mint-logs'
+
+(1/16) Running aws-sdk-go tests ... done in 1 seconds
+(2/16) Running aws-sdk-java tests ... done in 2 seconds
+(3/16) Running aws-sdk-php tests ... done in 41 seconds
+(4/16) Running aws-sdk-ruby tests ... done in 4 seconds
+(5/16) Running awscli tests ... done in 1 minutes and 48 seconds
+(6/16) Running healthcheck tests ... done in 0 seconds
+(7/16) Running ilm tests ... done in 2 minutes and 19 seconds
+(8/16) Running mc tests ... done in 23 seconds
+(9/16) Running minio-dotnet tests ... done in 28 seconds
+(10/16) Running minio-go tests ... FAILED in 24 seconds
+{
+  "args": {
+    "bucketName": "minio-go-test-lf6p3t2fhcrt23cf",
+    "objectName": "xq61ckm6ntp32jhvccn64ywf59rs16.zip",
+    "x-minio-extract": true,
+    "zipfile": "test/small/file-1.bin"
+  },
+  "duration": 4209,
+  "error": "We encountered an internal error, please try again.: cause(unexpected EOF)",
+  "function": "GetObject(bucketName, objectName)",
+  "message": "ReadAll failed",
+  "name": "minio-go: testGetObjectS3Zip",
+  "status": "FAIL"
+}
+(10/16) Running minio-java tests ... done in 22 seconds
+(11/16) Running minio-js tests ... done in 39 seconds
+(12/16) Running minio-py tests ... done in 52 seconds
+(13/16) Running s3cmd tests ... done in 13 seconds
+(14/16) Running s3select tests ... done in 2 seconds
+(15/16) Running versioning tests ... done in 3 minutes and 5 seconds
+
+Executed 15 out of 16 tests successfully.
