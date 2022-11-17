@@ -1,6 +1,6 @@
 {
     "require": {
-        "aws/aws-sdk-php": "^3.30",
+        "aws/aws-sdk-php": "3.242.1",
         "guzzlehttp/psr7": "^1.4"
     }
 }
