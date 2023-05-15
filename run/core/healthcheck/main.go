@@ -42,8 +42,7 @@ const (
 	timeout          = time.Duration(30 * time.Second)
 )
 
-type mintJSONFormatter struct {
-}
+type mintJSONFormatter struct{}
 
 func (f *mintJSONFormatter) Format(entry *log.Entry) ([]byte, error) {
 	data := make(log.Fields, len(entry.Data))
@@ -81,11 +80,15 @@ func failureLog(function string, args map[string]interface{}, startTime time.Tim
 	var fields log.Fields
 	// log with the fields as per mint
 	if err != nil {
-		fields = log.Fields{"name": "healthcheck", "function": function, "args": args,
-			"duration": duration.Nanoseconds() / 1000000, "status": fail, "alert": alert, "message": message, "error": err}
+		fields = log.Fields{
+			"name": "healthcheck", "function": function, "args": args,
+			"duration": duration.Nanoseconds() / 1000000, "status": fail, "alert": alert, "message": message, "error": err,
+		}
 	} else {
-		fields = log.Fields{"name": "healthcheck", "function": function, "args": args,
-			"duration": duration.Nanoseconds() / 1000000, "status": fail, "alert": alert, "message": message}
+		fields = log.Fields{
+			"name": "healthcheck", "function": function, "args": args,
+			"duration": duration.Nanoseconds() / 1000000, "status": fail, "alert": alert, "message": message,
+		}
 	}
 	return log.WithFields(fields)
 }
@@ -190,7 +193,7 @@ func testPrometheusEndpoint(endpoint string) {
 
 	if resp.StatusCode != http.StatusOK {
 		// Status not 200 OK
-		failureLog(function, nil, startTime, "", "GET /minio/prometheus/metrics returned non OK status", err).Fatal()
+		failureLog(function, nil, startTime, "", "GET "+endpoint+" returned non OK status", err).Fatal()
 	}
 
 	defer resp.Body.Close()
@@ -237,7 +240,7 @@ func testPrometheusEndpointV2(endpoint string) {
 
 	if resp.StatusCode != http.StatusOK {
 		// Status not 200 OK
-		failureLog(function, nil, startTime, "", "GET /minio/prometheus/metrics returned non OK status", err).Fatal()
+		failureLog(function, nil, startTime, "", "GET "+endpoint+" returned non OK status", err).Fatal()
 	}
 
 	defer resp.Body.Close()
