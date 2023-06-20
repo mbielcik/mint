@@ -4,9 +4,10 @@ Mint is a testing framework for Minio object server, available as a docker image
 
 - awscli
 - aws-sdk-go
+- aws-sdk-java
 - aws-sdk-php
 - aws-sdk-ruby
-- aws-sdk-java
+- healthcheck
 - mc
 - minio-go
 - minio-java
@@ -14,6 +15,8 @@ Mint is a testing framework for Minio object server, available as a docker image
 - minio-py
 - minio-dotnet
 - s3cmd
+- s3select
+- versioning
 
 ## Running Mint
 
@@ -65,16 +68,16 @@ $ docker run -e "SERVER_ENDPOINT=192.168.86.133:9000" -e "DOMAIN=minio.com"  \
 
 All test logs are stored in `/mint/log/log.json` as multiple JSON document.  Below is the JSON format for every entry in the log file.
 
-| JSON field | Type | Description | Example |
-|:--- |:--- |:--- |:--- |
-| `name` | _string_ | Testing tool/SDK name | `"aws-sdk-php"` |
-| `function` | _string_ | Test function name | `"getBucketLocation ( array $params = [] )"` |
-| `args` | _object_ | (Optional) Key/Value map of arguments passed to test function | `{"Bucket":"aws-sdk-php-bucket-20341"}` |
-| `duration` | _int_ | Time taken in milliseconds to run the test | `384` |
-| `status` | _string_ | one of `PASS`, `FAIL` or `NA` | `"PASS"` |
-| `alert` | _string_ | (Optional) Alert message indicating test failure | `"I/O error on create file"` |
-| `message` | _string_ | (Optional) Any log message | `"validating checksum of downloaded object"` |
-| `error` | _string_ | Detailed error message including stack trace on status `FAIL` | `"Error executing \"CompleteMultipartUpload\" on ...` |
+| JSON field | Type     | Description                                                   | Example                                               |
+|:-----------|:---------|:--------------------------------------------------------------|:------------------------------------------------------|
+| `name`     | _string_ | Testing tool/SDK name                                         | `"aws-sdk-php"`                                       |
+| `function` | _string_ | Test function name                                            | `"getBucketLocation ( array $params = [] )"`          |
+| `args`     | _object_ | (Optional) Key/Value map of arguments passed to test function | `{"Bucket":"aws-sdk-php-bucket-20341"}`               |
+| `duration` | _int_    | Time taken in milliseconds to run the test                    | `384`                                                 |
+| `status`   | _string_ | one of `PASS`, `FAIL` or `NA`                                 | `"PASS"`                                              |
+| `alert`    | _string_ | (Optional) Alert message indicating test failure              | `"I/O error on create file"`                          |
+| `message`  | _string_ | (Optional) Any log message                                    | `"validating checksum of downloaded object"`          |
+| `error`    | _string_ | Detailed error message including stack trace on status `FAIL` | `"Error executing \"CompleteMultipartUpload\" on ...` |
 
 ## For Developers
 
@@ -103,19 +106,19 @@ Below are the steps need to be followed
 #### Test data
 Tests may use pre-created data set to perform various object operations on Minio server.  Below data files are available under `/mint/data` directory.
 
-| File name |  Size |
-|:--- |:--- |
-| datafile-0-b | 0B |
-| datafile-1-b | 1B |
-| datafile-1-kB |1KiB |
-| datafile-10-kB |10KiB |
-| datafile-33-kB |33KiB |
-| datafile-100-kB |100KiB |
-| datafile-1-MB |1MiB |
-| datafile-1.03-MB |1.03MiB |
-| datafile-5-MB |5MiB |
-| datafile-6-MB |6MiB |
-| datafile-10-MB |10MiB |
-| datafile-11-MB |11MiB |
-| datafile-65-MB |65MiB |
-| datafile-129-MB |129MiB |
+| File name        | Size    |
+|:-----------------|:--------|
+| datafile-0-b     | 0B      |
+| datafile-1-b     | 1B      |
+| datafile-1-kB    | 1KiB    |
+| datafile-10-kB   | 10KiB   |
+| datafile-33-kB   | 33KiB   |
+| datafile-100-kB  | 100KiB  |
+| datafile-1-MB    | 1MiB    |
+| datafile-1.03-MB | 1.03MiB |
+| datafile-5-MB    | 5MiB    |
+| datafile-6-MB    | 6MiB    |
+| datafile-10-MB   | 10MiB   |
+| datafile-11-MB   | 11MiB   |
+| datafile-65-MB   | 65MiB   |
+| datafile-129-MB  | 129MiB  |
