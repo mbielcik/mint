@@ -24,7 +24,7 @@ if [ -z "$MINIO_JAVA_VERSION" ]; then
 fi
 
 test_run_dir="$MINT_RUN_CORE_DIR/minio-java"
-git clone --quiet https://github.com/minio/minio-java.git "$test_run_dir/minio-java.git"
+git clone --quiet https://github.com/iternity-dotcom/minio-java.git "$test_run_dir/minio-java.git"
 (
 	cd "$test_run_dir/minio-java.git"
 	git checkout --quiet "all-commits"
