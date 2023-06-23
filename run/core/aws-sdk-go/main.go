@@ -70,8 +70,7 @@ type errorResponse struct {
 	Headers http.Header `xml:"-" json:"-"`
 }
 
-type mintJSONFormatter struct {
-}
+type mintJSONFormatter struct{}
 
 func (f *mintJSONFormatter) Format(entry *log.Entry) ([]byte, error) {
 	data := make(log.Fields, len(entry.Data))
@@ -109,11 +108,15 @@ func failureLog(function string, args map[string]interface{}, startTime time.Tim
 	var fields log.Fields
 	// log with the fields as per mint
 	if err != nil {
-		fields = log.Fields{"name": "aws-sdk-go", "function": function, "args": args,
-			"duration": duration.Nanoseconds() / 1000000, "status": FAIL, "alert": alert, "message": message, "error": err}
+		fields = log.Fields{
+			"name": "aws-sdk-go", "function": function, "args": args,
+			"duration": duration.Nanoseconds() / 1000000, "status": FAIL, "alert": alert, "message": message, "error": err,
+		}
 	} else {
-		fields = log.Fields{"name": "aws-sdk-go", "function": function, "args": args,
-			"duration": duration.Nanoseconds() / 1000000, "status": FAIL, "alert": alert, "message": message}
+		fields = log.Fields{
+			"name": "aws-sdk-go", "function": function, "args": args,
+			"duration": duration.Nanoseconds() / 1000000, "status": FAIL, "alert": alert, "message": message,
+		}
 	}
 	return log.WithFields(fields)
 }
@@ -180,8 +183,8 @@ func isObjectTaggingImplemented(s3Client *s3.S3) bool {
 }
 
 func cleanup(s3Client *s3.S3, bucket string, object string, function string,
-	args map[string]interface{}, startTime time.Time, deleteBucket bool) {
-
+	args map[string]interface{}, startTime time.Time, deleteBucket bool,
+) {
 	// Deleting the object, just in case it was created. Will not check for errors.
 	s3Client.DeleteObject(&s3.DeleteObjectInput{
 		Bucket: aws.String(bucket),
@@ -197,7 +200,6 @@ func cleanup(s3Client *s3.S3, bucket string, object string, function string,
 			return
 		}
 	}
-
 }
 
 func testPresignedPutInvalidHash(s3Client *s3.S3) {
@@ -835,6 +837,14 @@ func testCreateBucketError(s3Client *s3.S3) {
 		Bucket: aws.String(bucketName),
 	})
 	if err != nil {
+		// InvalidRegion is a valid error if the endpoint doesn't support
+		// different 'regions', we simply skip this test in such scenarios.
+		if err.(s3.RequestFailure).Code() == "InvalidRegion" {
+			// Restore region in s3Client
+			s3Client.Config.Region = region
+			successLogger(function, args, startTime).Info()
+			return
+		}
 		failureLog(function, args, startTime, "", "AWS SDK Go CreateBucket Failed", err).Fatal()
 		return
 	}
@@ -938,7 +948,8 @@ func testListMultipartUploads(s3Client *s3.S3) {
 		Bucket: aws.String(bucket),
 		Key:    aws.String(object),
 		MultipartUpload: &s3.CompletedMultipartUpload{
-			Parts: completedParts},
+			Parts: completedParts,
+		},
 		UploadId: multipartUpload.UploadId,
 	})
 	if err == nil {
@@ -1034,7 +1045,7 @@ func testSSECopyObject(s3Client *s3.S3) {
 	}
 	defer cleanup(s3Client, bucketName, object+"-enc", function, args, startTime, true)
 	defer cleanup(s3Client, bucketName, object+"-noenc", function, args, startTime, false)
-	var wrongSuccess = errors.New("Succeeded instead of failing. ")
+	wrongSuccess := errors.New("Succeeded instead of failing. ")
 
 	// create encrypted object
 	sseCustomerKey := aws.String("32byteslongsecretkeymustbegiven2")
@@ -1062,7 +1073,7 @@ func testSSECopyObject(s3Client *s3.S3) {
 		failureLog(function, args, startTime, "", "AWS SDK Go CopyObject expected to fail, but it succeeds ", wrongSuccess).Fatal()
 		return
 	}
-	var invalidSSECustomerAlgorithm = "Requests specifying Server Side Encryption with Customer provided keys must provide a valid encryption algorithm"
+	invalidSSECustomerAlgorithm := "Requests specifying Server Side Encryption with Customer provided keys must provide a valid encryption algorithm"
 	if !strings.Contains(errCopyEnc.Error(), invalidSSECustomerAlgorithm) {
 		failureLog(function, args, startTime, "", fmt.Sprintf("AWS SDK Go CopyObject expected error %v got %v", invalidSSECustomerAlgorithm, errCopyEnc), errCopyEnc).Fatal()
 		return
@@ -1093,7 +1104,7 @@ func testSSECopyObject(s3Client *s3.S3) {
 		failureLog(function, args, startTime, "", "AWS SDK Go CopyObject expected to fail, but it succeeds ", wrongSuccess).Fatal()
 		return
 	}
-	var invalidEncryptionParameters = "The encryption parameters are not applicable to this object."
+	invalidEncryptionParameters := "The encryption parameters are not applicable to this object."
 	if !strings.Contains(errCopy.Error(), invalidEncryptionParameters) {
 		failureLog(function, args, startTime, "", fmt.Sprintf("AWS SDK Go CopyObject expected error %v got %v", invalidEncryptionParameters, errCopy), errCopy).Fatal()
 		return
