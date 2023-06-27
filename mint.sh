@@ -106,12 +106,10 @@ function run_test() {
 }
 
 function trust_s3_endpoint_tls_cert() {
-	# Download the public certificate from the server
-	openssl s_client -showcerts -verify 5 -connect "$SERVER_ENDPOINT" </dev/null |
-		awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/{ if(/BEGIN CERTIFICATE/){a++}; out="cert"a".pem"; print >out}'
-	for cert in *.pem; do
-		mv -vf "${cert}" /usr/local/share/ca-certificates/
-	done
+    # Download the public certificate from the server
+    openssl s_client -showcerts -connect "$SERVER_ENDPOINT" </dev/null 2>/dev/null | \
+    openssl x509 -outform PEM -out /usr/local/share/ca-certificates/s3_server_cert.crt || \
+    exit 1
 
 	# Load the certificate in the system
 	update-ca-certificates --fresh >/dev/null
