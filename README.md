@@ -5,6 +5,7 @@ Mint is a testing framework for Minio object server, available as a podman image
 - awscli
 - aws-sdk-go
 - aws-sdk-java
+- aws-sdk-java-v2
 - aws-sdk-php
 - aws-sdk-ruby
 - healthcheck
@@ -120,3 +121,7 @@ Tests may use pre-created data set to perform various object operations on Minio
 | datafile-11-MB   | 11MiB   |
 | datafile-65-MB   | 65MiB   |
 | datafile-129-MB  | 129MiB  |
+
+### Updating SDKs/binaries in the image
+
+In many cases, updating the SDKs or binaries in the image is just a matter of making a commit updating the corresponding version in this repo. However, in some cases, e.g. when `mc` needs to be updated (the latest `mc` is pulled in during each mint image build), a sort of "dummy" commit is required as an image rebuild must be triggered. Note that an empty commit does not appear to trigger the image rebuild in the Docker Hub.

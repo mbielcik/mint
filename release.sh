@@ -16,12 +16,7 @@
 #
 
 export MINT_ROOT_DIR=${MINT_ROOT_DIR:-/mint}
-export MINT_RUN_CORE_DIR="$MINT_ROOT_DIR/run/core"
-export MINT_RUN_BUILD_DIR="$MINT_ROOT_DIR/build"
-export WGET="wget --quiet --no-check-certificate"
-
-"${MINT_ROOT_DIR}"/create-data-files.sh
-"${MINT_ROOT_DIR}"/preinstall.sh
+source "${MINT_ROOT_DIR}"/source.sh
 
 # install mint app packages
 for pkg in "$MINT_ROOT_DIR/build"/*/install.sh; do

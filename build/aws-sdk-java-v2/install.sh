@@ -15,24 +15,13 @@
 #  limitations under the License.
 #
 
-# Checkout at /mint/test-run/minio-js/
-# During run of the test copy it to the the /min/run/core/minio-js/minio-js
+test_run_dir="$MINT_RUN_CORE_DIR/aws-sdk-java-v2"
 
-install_path="./test-run/minio-js/"
-rm -rf $install_path
+cd "$(dirname "$(realpath "$0")")"
 
-git clone https://github.com/minio/minio-js.git $install_path
+gradle wrapper
+./gradlew clean build
 
-cd $install_path || exit 0
+cp app/build/libs/FunctionalTests.jar "$test_run_dir/"
 
-# Get new tags from remote
-git fetch --tags
-# Get latest tag name
-# shellcheck disable=SC2046
-LATEST=$(git describe --tags $(git rev-list --tags --max-count=1))
-
-echo "Using minio-js RELEASE $LATEST"
-
-git checkout "${LATEST}" --force &>/dev/null
-
-npm install --quiet &>/dev/null
+rm -rf app/build/
