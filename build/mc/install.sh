@@ -25,10 +25,10 @@ test_run_dir="$MINT_RUN_CORE_DIR/mc"
 $WGET --output-document="${test_run_dir}/mc" "https://dl.minio.io/client/mc/release/linux-amd64/mc.${MC_VERSION}"
 chmod a+x "${test_run_dir}/mc"
 
-git clone --quiet https://github.com/iternity-dotcom/mc.git "$test_run_dir/mc.git"
+git clone --quiet https://github.com/mbielcik/mc.git "$test_run_dir/mc.git"
 (
 	cd "$test_run_dir/mc.git"
-	git checkout --quiet "all-commits"
+	git checkout --quiet "master"
 )
 cp -a "${test_run_dir}/mc.git/functional-tests.sh" "$test_run_dir/"
 rm -fr "$test_run_dir/mc.git"

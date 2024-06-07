@@ -31,9 +31,9 @@ if [ -z "$out_dir" ]; then
 fi
 
 temp_dir="$MINIO_DOTNET_SDK_PATH/temp"
-git clone --quiet https://github.com/iternity-dotcom/minio-dotnet.git "${temp_dir}"
+git clone --quiet https://github.com/mbielcik/minio-dotnet.git "${temp_dir}"
 pushd "${temp_dir}" >/dev/null
-git checkout --quiet "all-commits"
+git checkout --quiet "minio-updats"
 
 dotnet publish Minio.Functional.Tests --configuration Mint --framework net6.0 --output ../out
 
