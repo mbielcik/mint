@@ -1,6 +1,6 @@
-#!/bin/bash -e
+#!/bin/bash
 #
-#  Minio Cloud Storage, (C) 2017 Minio, Inc.
+#  Mint (C) 2018 Minio, Inc.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -15,13 +15,16 @@
 #  limitations under the License.
 #
 
-export MINT_ROOT_DIR=${MINT_ROOT_DIR:-/mint}
-source "${MINT_ROOT_DIR}"/source.sh
+# handle command line arguments
+if [ $# -ne 2 ]; then
+	echo "usage: run.sh <OUTPUT-LOG-FILE> <ERROR-LOG-FILE>"
+	exit 1
+fi
 
-# install mint app packages
-for pkg in "$MINT_ROOT_DIR/build"/*/install.sh; do
-	echo "Running $pkg"
-	$pkg
-done
+output_log_file="$1"
+error_log_file="$2"
 
-"${MINT_ROOT_DIR}"/postinstall.sh
+# run tests
+cd /mint/run/core/aws-sdk-java-v2/ || exit 1
+
+java -jar FunctionalTests.jar 1>>"$output_log_file" 2>"$error_log_file"

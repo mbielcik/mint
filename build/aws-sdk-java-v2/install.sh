@@ -1,6 +1,6 @@
 #!/bin/bash -e
 #
-#  Minio Cloud Storage, (C) 2017 Minio, Inc.
+#  Mint (C) 2017 Minio, Inc.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -15,13 +15,13 @@
 #  limitations under the License.
 #
 
-export MINT_ROOT_DIR=${MINT_ROOT_DIR:-/mint}
-source "${MINT_ROOT_DIR}"/source.sh
+test_run_dir="$MINT_RUN_CORE_DIR/aws-sdk-java-v2"
 
-# install mint app packages
-for pkg in "$MINT_ROOT_DIR/build"/*/install.sh; do
-	echo "Running $pkg"
-	$pkg
-done
+cd "$(dirname "$(realpath "$0")")"
 
-"${MINT_ROOT_DIR}"/postinstall.sh
+gradle wrapper
+./gradlew clean build
+
+cp app/build/libs/FunctionalTests.jar "$test_run_dir/"
+
+rm -rf app/build/
