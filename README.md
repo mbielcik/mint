@@ -49,7 +49,8 @@ Below environment variables are required to be passed to the podman container. S
 | `ENABLE_VIRTUAL_STYLE` | (Optional) Set `1` to indicate virtual style access . Defaults to `0` (Path style)                                                             | `1`                                        |
 | `RUN_ON_FAIL`          | (Optional) Set `1` to indicate execute all tests independent of failures (currently implemented for minio-go and minio-java) . Defaults to `0` | `1`                                        |
 | `SERVER_REGION`        | (Optional) Set custom region for region specific tests                                                                                         | `us-west-1`                                |
-| `SKIP_SSE_TESTS`       | (Optional) Set `1` to ignore Server Side Encryption tests. Defaults to `0`                                                                     | `1`                                        |
+| `SKIP_SSE_TESTS`       | (Optional) Set `1` to ignore Server Side Encryption tests(client provided keys). Defaults to `0`                                                                     | `1`                                        |
+| `ENABLE_SSE_S3TESTS`   | (Optional) Set `1` to execute encryption tests on a bucket with enabled Server Side Encryption 'S3'(Encrpytion at REST ). Defaults to `0`                                                                     | `1`                                        |
 
 ### Test virtual style access against Minio server
 
@@ -59,9 +60,15 @@ To test Minio server virtual style access with Mint, follow these steps:
 - Start Minio server.
 - Execute Mint against Minio server (with `MINIO_DOMAIN` set to `myminio.com`) using this command
 ```sh
-$ podman run -e "SERVER_ENDPOINT=192.168.86.133:9000" -e "DOMAIN=minio.com"  \
-	     -e "ACCESS_KEY=minio" -e "SECRET_KEY=minio123" -e "ENABLE_HTTPS=0" \
-	     -e "ENABLE_VIRTUAL_STYLE=1" minio/mint
+$ docker run \
+    -e MINT_MODE=full \
+    -e "SERVER_ENDPOINT=192.168.86.133:9000" -e "DOMAIN=minio.com"  \
+    -e ACCESS_KEY="minio" \
+    -e SECRET_KEY="minio123" \
+    -e ENABLE_HTTPS=1 \
+    -e SKIP_SSE_TESTS=1 \
+    -e RUN_ON_FAIL=1 \
+    -e ENABLE_SSE_S3TESTS=1 \
 ```
 
 ### Mint log format
@@ -83,13 +90,19 @@ All test logs are stored in `/mint/log/log.json` as multiple JSON document.  Bel
 
 ### Running Mint development code
 
-After making changes to Mint source code a local podman image can be built/run by
+After making changes to Mint source code a local docker image can be built/run by
 
 ```sh
-$ podman build -t minio/mint . -f Dockerfile
-$ podman run -e SERVER_ENDPOINT=play.minio.io:9000 -e ACCESS_KEY=Q3AM3UQ867SPQQA43P2F \
-             -e SECRET_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG \
-             -e ENABLE_HTTPS=1 -e MINT_MODE=full minio/mint:latest
+$ docker build -t minio/mint . -f Dockerfile
+ docker run \
+    -e MINT_MODE=full \
+    -e "SERVER_ENDPOINT=192.168.86.133:9000" -e "DOMAIN=minio.com"  \
+    -e ACCESS_KEY="minio" \
+    -e SECRET_KEY="minio123" \
+    -e ENABLE_HTTPS=1 \
+    -e SKIP_SSE_TESTS=1 \
+    -e RUN_ON_FAIL=1 \
+    -e ENABLE_SSE_S3TESTS=1 \ minio/mint:latest
 ```
 
 

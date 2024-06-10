@@ -15,5 +15,7 @@ export ACCESS_KEY="Q3AM3UQ867SPQQA43P2F"
 export SECRET_KEY="zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG"
 export ENABLE_HTTPS=1
 export SERVER_REGION=us-east-1
+export ENABLE_SSE_S3TESTS=1
+export SKIP_SSE_TESTS=1
 ./run.sh /tmp/output.log /tmp/error.log
 ```
