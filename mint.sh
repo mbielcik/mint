@@ -23,6 +23,7 @@ ENABLE_HTTPS=${ENABLE_HTTPS:-0}
 SKIP_SSE_TESTS=${SKIP_SSE_TESTS:-0}
 ENABLE_VIRTUAL_STYLE=${ENABLE_VIRTUAL_STYLE:-0}
 RUN_ON_FAIL=${RUN_ON_FAIL:-0}
+ENABLE_SSE_S3TESTS=${RUN_ON_FAIL:-0}
 
 if [ -z "$SERVER_ENDPOINT" ]; then
 	SERVER_ENDPOINT="play.minio.io:9000"
@@ -118,6 +119,7 @@ function trust_s3_endpoint_tls_cert() {
 	export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 	export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 	export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+	export AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 }
 
 function main() {
