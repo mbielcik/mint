@@ -19,8 +19,6 @@ import (
 	"context"
 	"os"
 	"time"
-	"crypto/tls"
-	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
