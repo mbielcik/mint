@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -292,6 +293,195 @@ func testPresignedPutInvalidHash(ctx context.Context, s3Client *s3.Client, presi
 
 	if errResp.Code != "SignatureDoesNotMatch" {
 		failureLog(function, args, startTime, "", fmt.Sprintf("AWS SDK Go V2 presigned PUT expected to fail with SignatureDoesNotMatch but got %v", errResp.Code), errors.New("AWS S3 error code mismatch")).Fatal()
+		return
+	}
+
+	successLogger(function, args, startTime).Info()
+}
+
+func testConditionalPutWithCorrectETag(ctx context.Context, s3Client *s3.Client) {
+	startTime := time.Now()
+	function := "ConditionalPutWithCorrectETag"
+	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "aws-sdk-go-test-")
+	object := "testConditionalPut"
+	args := map[string]interface{}{
+		"bucketName": bucket,
+		"objectName": object,
+	}
+
+	// Create bucket
+	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 CreateBucket Failed", err).Fatal()
+		return
+	}
+	defer cleanupBucket(ctx, s3Client, bucket, function, args, startTime)
+
+	// Put object and capture ETag
+	putResp, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		Body:   bytes.NewReader([]byte("test content")),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject Failed", err).Fatal()
+		return
+	}
+
+	if putResp.ETag == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject returned nil ETag", errors.New("nil ETag")).Fatal()
+		return
+	}
+
+	etag := *putResp.ETag
+
+	updatedContent := []byte("update content")
+
+	// Calculate SHA256 checksum
+	sha256Hash := sha256.Sum256(updatedContent)
+	expectedChecksum := base64.StdEncoding.EncodeToString(sha256Hash[:])
+
+	// Put with If-Match using correct ETag
+	putResp, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:  aws.String(bucket),
+		Key:     aws.String(object),
+		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		Body: bytes.NewReader(updatedContent),
+		IfMatch: aws.String(etag),
+	})
+
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject with If-Match failed", err).Fatal()
+		return
+	}
+
+	// Verify checksum is returned
+	if putResp.ChecksumSHA256 == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject response missing ChecksumSHA256", errors.New("missing checksum")).Fatal()
+		return
+	}
+
+	// Verify checksum is correct
+	if *putResp.ChecksumSHA256 != expectedChecksum {
+		failureLog(function, args, startTime, "", fmt.Sprintf("AWS SDK Go V2 ChecksumSHA256 mismatch: expected %s, got %s", expectedChecksum, *putResp.ChecksumSHA256), errors.New("checksum mismatch")).Fatal()
+		return
+	}
+
+	// Get object and verify checksum
+	getResp, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket:       aws.String(bucket),
+		Key:          aws.String(object),
+		ChecksumMode: types.ChecksumModeEnabled,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 GetObject failed", err).Fatal()
+		return
+	}
+	defer getResp.Body.Close()
+
+	if getResp.ChecksumSHA256 == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 GetObject response missing ChecksumSHA256", errors.New("missing checksum")).Fatal()
+		return
+	}
+
+	successLogger(function, args, startTime).Info()
+}
+
+func testConditionalPutWithInCorrectETag(ctx context.Context, s3Client *s3.Client) {
+	startTime := time.Now()
+	function := "ConditionalPutWithInCorrectETag"
+	bucket := randString(60, rand.NewSource(time.Now().UnixNano()), "aws-sdk-go-test-")
+	object := "testConditionalPut"
+	args := map[string]interface{}{
+		"bucketName": bucket,
+		"objectName": object,
+	}
+
+	// Create bucket
+	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 CreateBucket Failed", err).Fatal()
+		return
+	}
+	defer cleanupBucket(ctx, s3Client, bucket, function, args, startTime)
+
+	initialContent := []byte("initial")
+
+	// Calculate SHA256 checksum
+	sha256Hash := sha256.Sum256(initialContent)
+	expectedChecksum := base64.StdEncoding.EncodeToString(sha256Hash[:])
+
+	// Put object and capture ETag
+	putResp, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(object),
+		Body: bytes.NewReader(initialContent),
+		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject Failed", err).Fatal()
+		return
+	}
+
+	if putResp.ETag == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject returned nil ETag", errors.New("nil ETag")).Fatal()
+		return
+	}
+
+	updatedContent := []byte("update content")
+
+	// Put with If-Match using correct ETag
+	putResp, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:  aws.String(bucket),
+		Key:     aws.String(object),
+		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+		Body: bytes.NewReader(updatedContent),
+		IfMatch: aws.String("\"incorrect tag\""),
+	})
+
+	if err == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 PutObject with wrong ETag should have failed", errors.New("expected precondition failure")).Fatal()
+		return
+	}
+
+	// Verify error is PreconditionFailed
+	if !strings.Contains(err.Error(), "PreconditionFailed") && !strings.Contains(err.Error(), "412") {
+		failureLog(function, args, startTime, "", fmt.Sprintf("AWS SDK Go V2 expected PreconditionFailed error but got: %v", err), err).Fatal()
+		return
+	}
+
+	// Get object and verify checksum
+	getResp, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket:       aws.String(bucket),
+		Key:          aws.String(object),
+		ChecksumMode: types.ChecksumModeEnabled,
+	})
+	if err != nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 GetObject failed", err).Fatal()
+		return
+	}
+	defer getResp.Body.Close()
+
+	if getResp.ChecksumSHA256 == nil {
+		failureLog(function, args, startTime, "", "AWS SDK Go V2 GetObject response missing ChecksumSHA256", errors.New("missing checksum")).Fatal()
+		return
+	}
+
+	data, err := io.ReadAll(getResp.Body)
+	if err != nil {
+		failureLog(function, args, startTime, "", "Cannot read content", errors.New("unable to read content")).Fatal()
+		return
+	}
+
+	sum := sha256.Sum256(data)
+	localB64 := base64.StdEncoding.EncodeToString(sum[:])
+
+	if localB64 != expectedChecksum {
+		failureLog(function, args, startTime, "", "Hashes are different. So upload may was successful which should not be the case!", errors.New("unexpected checksum")).Fatal()
 		return
 	}
 
@@ -2341,10 +2531,15 @@ func main() {
 	testGetObjectRange(ctx, s3Client)
 	testObjectMetadata(ctx, s3Client)
 	testPresignedPutInvalidHash(ctx, s3Client, presignClient)
-	testConditionalDeleteWithCorrectETag(ctx, s3Client)
-	testConditionalDeleteWithIncorrectETag(ctx, s3Client)
-	testConditionalDeleteWithWildcardExists(ctx, s3Client)
-	testConditionalDeleteWithWildcardMissing(ctx, s3Client)
+
+	// Conditional delete was introduced in AWS in September 2025
+	// So our Minio version cannot support this feature
+	// testConditionalDeleteWithCorrectETag(ctx, s3Client)
+	// testConditionalDeleteWithIncorrectETag(ctx, s3Client)
+	// testConditionalDeleteWithWildcardExists(ctx, s3Client)
+	// testConditionalDeleteWithWildcardMissing(ctx, s3Client)
+	testConditionalPutWithCorrectETag(ctx, s3Client)
+	testConditionalPutWithInCorrectETag(ctx, s3Client)
 	testChecksumCRC32(ctx, s3Client)
 	testChecksumCRC32C(ctx, s3Client)
 	testChecksumSHA1(ctx, s3Client)
