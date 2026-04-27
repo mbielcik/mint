@@ -17,7 +17,7 @@
 
 MINIO_PY_VERSION="7.2.20"
 test_run_dir="$MINT_RUN_CORE_DIR/minio-py"
-pip3 install --user faker
-pip3 install minio=="${MINIO_PY_VERSION}"
+python -m pip install faker
+python -m pip install minio=="${MINIO_PY_VERSION}"
 
 $WGET --output-document="$test_run_dir/tests.py" "https://raw.githubusercontent.com/iternity-dotcom/minio-py/all-commits/tests/functional/tests.py"

@@ -16,6 +16,10 @@ WORKDIR /mint
 
 RUN /mint/create-data-files.sh
 RUN /mint/preinstall.sh
+
+RUN python3 -m venv /opt/mint-venv
+ENV PATH="/opt/mint-venv/bin:$PATH"
+
 RUN /mint/release.sh
 
 ENTRYPOINT ["/mint/entrypoint.sh"]
