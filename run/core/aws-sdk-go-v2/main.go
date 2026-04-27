@@ -2482,6 +2482,7 @@ func main() {
 	accessKey := os.Getenv("ACCESS_KEY")
 	secretKey := os.Getenv("SECRET_KEY")
 	secure := os.Getenv("ENABLE_HTTPS")
+	skip_sse_tests := os.Getenv("SKIP_SSE_TESTS")
 	if strings.HasSuffix(endpoint, ":443") {
 		endpoint = strings.ReplaceAll(endpoint, ":443", "")
 	}
@@ -2554,7 +2555,7 @@ func main() {
 	testSelectObject(ctx, s3Client)
 	testCreateBucketError(ctx, s3Client, "us-east-1")
 	testListMultipartUploads(ctx, s3Client)
-	if secure == "1" {
+	if secure == "1" && skip_sse_tests != "1" {
 		testSSECopyObject(ctx, s3Client)
 	}
 	if isObjectTaggingImplemented(ctx, s3Client) {

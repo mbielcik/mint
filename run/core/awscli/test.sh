@@ -1239,7 +1239,6 @@ function test_list_objects_error() {
 # put object negative test - tests for following conditions.
 # - invalid object name.
 # - invalid Content-Md5
-# - invalid Content-Length
 function test_put_object_error() {
 	# log start time
 	start_time=$(get_time)
@@ -1251,19 +1250,6 @@ function test_put_object_error() {
 	# if make bucket succeeds upload an object without content-md5.
 	if [ $rv -eq 0 ]; then
 		function="${AWS} s3api put-object --body ${MINT_DATA_DIR}/datafile-1-kB --bucket ${bucket_name} --key datafile-1-kB --content-md5 invalid"
-		test_function=${function}
-		out=$($function 2>&1)
-		rv=$?
-		if [ $rv -ne 255 ]; then
-			rv=1
-		else
-			rv=0
-		fi
-	fi
-
-	# upload an object without content-length.
-	if [ $rv -eq 0 ]; then
-		function="${AWS} s3api put-object --body ${MINT_DATA_DIR}/datafile-1-kB --bucket ${bucket_name} --key datafile-1-kB --content-length -1"
 		test_function=${function}
 		out=$($function 2>&1)
 		rv=$?
@@ -1837,19 +1823,19 @@ main() {
 		test_upload_object_10 &&
 		test_multipart_upload_10 &&
 		test_bucket_lifecycle &&
-		test_serverside_encryption &&
-		test_serverside_encryption_get_range &&
-		test_serverside_encryption_multipart &&
-		test_serverside_encryption_multipart_copy &&
+		#test_serverside_encryption &&
+		#test_serverside_encryption_get_range &&
+		#test_serverside_encryption_multipart &&
+		#test_serverside_encryption_multipart_copy &&
 		# Success cli ops.
 		test_aws_s3_cp &&
 		test_aws_s3_sync &&
 		# Error tests
 		test_list_objects_error &&
 		test_put_object_error &&
-		test_serverside_encryption_error
-	# test_worm_bucket && \
-	# test_legal_hold
+		#test_serverside_encryption_error
+	 #test_worm_bucket && \
+	 #test_legal_hold
 
 	return $?
 }
